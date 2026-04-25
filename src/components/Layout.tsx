@@ -4,7 +4,7 @@ import { useApp } from '../store/AppContext';
 import { ClockWidget } from './ClockWidget';
 import { 
   LayoutDashboard, Database, Zap, Target, Clock, 
-  RotateCw, ChefHat, ClipboardList, Users, Settings, LogOut 
+  RotateCw, ChefHat, ClipboardList, Users, Settings, LogOut, FileSpreadsheet
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -25,8 +25,9 @@ export function Layout() {
     {
       title: "Vận Hành",
       items: [
-        { name: "Quản Lý Dữ Liệu POS", path: "/pos-upload", icon: Database, roles: ['admin', 'manager'] },
+        { name: "Tải Lên Dữ Liệu POS", path: "/pos-upload", icon: Database, roles: ['admin', 'manager'] },
         { name: "Nhập Liệu Trực Tiếp", path: "/live-entry", icon: Zap, "roles": ['admin', 'manager', 'staff'] },
+        { name: "Quản Lý Live Entry", path: "/live-history", icon: FileSpreadsheet, roles: ['admin', 'manager'] },
       ]
     },
     {

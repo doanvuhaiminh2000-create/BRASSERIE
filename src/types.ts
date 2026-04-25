@@ -32,34 +32,35 @@ export interface MenuItem {
   complexity: 1 | 2 | 3;
 }
 
-export interface OrderItem {
+export interface SessionItem {
   id: string;
   menuItem: MenuItem;
   quantity: number;
   notes?: string;
   isUpsold?: boolean;
-  servedAt?: number | null;
+  status: 'PENDING' | 'SENT' | 'SERVED' | 'CANCELED';
+  round: number;
+  cancelReason?: string;
+  sentAt?: number;
 }
 
 export interface UpsellAttempt {
   id: string;
-  dishId: string;
-  dishName: string;
+  staffId: string;
+  staffName: string;
+  menuItemId: string;
   result: 'TC' | 'TChối';
   reason?: string;
   timestamp: number;
-  staffId: string;
 }
 
-export interface SessionTimeline {
-  T1_Seated: number | null;      // Khách ngồi
-  T2_OrderEnd: number | null;    // Gọi món xong
-  T4_FinalConfirm: number | null; // Chốt order gửi bếp
-  T5_SendToKitchen: number | null; // Gửi bếp (thực tế)
-  T6A_FirstDish: number | null;  // Món đầu ra
-  T6A_LastDish: number | null;   // Món cuối ra
-  T6B_Checkout: number | null;   // Khách gọi TT
-  T7_Leave: number | null;       // Khách rời bàn
+export interface EventLog {
+  id: string;
+  time: number;
+  staffId: string;
+  staffName: string;
+  action: string;
+  details: string;
 }
 
 export interface OrderSession {
@@ -71,10 +72,11 @@ export interface OrderSession {
   closedAt?: number | null;
   openedByStaffId: string;
   
-  items: OrderItem[];
+  items: SessionItem[];
   upsellAttempts: UpsellAttempt[];
   
-  timeline: SessionTimeline;
+  currentRound: number;
+  eventLogs: EventLog[];
   
   paymentMethod?: 'Tiền Mặt' | 'Thẻ NCB' | 'VietQR' | 'Voucher';
 }

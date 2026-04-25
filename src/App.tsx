@@ -3,9 +3,17 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useApp } from './store/AppContext';
 import { Login } from './pages/Login';
 import { Layout } from './components/Layout';
-// Import pages (we will create these next)
+// Import pages
 import { LiveEntry } from './pages/LiveEntry/LiveEntry';
 import { Dashboard } from './pages/Dashboard/Dashboard';
+import { UpsellAnalysis } from './pages/Analysis/UpsellAnalysis';
+import { SessionHistory } from './pages/LiveEntry/SessionHistory';
+import { POSUpload } from './pages/POSManagement/POSUpload';
+
+import { OperationAnalysis } from './pages/Analysis/OperationAnalysis';
+import { KitchenAnalysis } from './pages/Analysis/KitchenAnalysis';
+import { MenuAnalysis } from './pages/Analysis/MenuAnalysis';
+import { StaffAnalysis } from './pages/Analysis/StaffAnalysis';
 
 // Placeholder Auth Guard
 const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactNode, allowedRoles?: string[] }) => {
@@ -26,14 +34,15 @@ export default function App() {
         <Route path="/dashboard" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><Dashboard /></ProtectedRoute>} />
         <Route path="/live-entry/*" element={<LiveEntry />} />
         
-        {/* Placeholders for other modules */}
-        <Route path="/pos-upload" element={<div className="p-8 text-white">Quản Lý Dữ Liệu POS (Module 1) - Coming soon</div>} />
-        <Route path="/analysis/upsell" element={<div className="p-8 text-white">Hành Vi Order & Upsell - Coming soon</div>} />
-        <Route path="/analysis/service-time" element={<div className="p-8 text-white">Thời Gian Phục Vụ - Coming soon</div>} />
-        <Route path="/analysis/table-turnover" element={<div className="p-8 text-white">Vòng Quay Bàn - Coming soon</div>} />
-        <Route path="/analysis/kitchen" element={<div className="p-8 text-white">Hiệu Quả Bếp - Coming soon</div>} />
-        <Route path="/analysis/menu" element={<div className="p-8 text-white">Hiệu Quả Menu - Coming soon</div>} />
-        <Route path="/analysis/staff" element={<div className="p-8 text-white">Hiệu Suất Nhân Viên - Coming soon</div>} />
+        {/* Modules */}
+        <Route path="/pos-upload" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><POSUpload /></ProtectedRoute>} />
+        <Route path="/live-history" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><SessionHistory /></ProtectedRoute>} />
+        <Route path="/analysis/upsell" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><UpsellAnalysis /></ProtectedRoute>} />
+        <Route path="/analysis/service-time" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><OperationAnalysis /></ProtectedRoute>} />
+        <Route path="/analysis/table-turnover" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><OperationAnalysis /></ProtectedRoute>} />
+        <Route path="/analysis/kitchen" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><KitchenAnalysis /></ProtectedRoute>} />
+        <Route path="/analysis/menu" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><MenuAnalysis /></ProtectedRoute>} />
+        <Route path="/analysis/staff" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><StaffAnalysis /></ProtectedRoute>} />
         <Route path="/settings" element={<div className="p-8 text-white">Cài Đặt Hệ Thống - Coming soon</div>} />
       </Route>
     </Routes>
