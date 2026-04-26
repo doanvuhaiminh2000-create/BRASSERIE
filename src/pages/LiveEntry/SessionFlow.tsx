@@ -45,17 +45,9 @@ export function SessionFlow() {
 
   if (!table) return <div className="p-10 text-center font-bold text-[var(--color-text-muted)] uppercase">Bàn không tồn tại</div>;
 
-  const handleBack = () => {
-    if (table.status === 'KHOA' && table.lockedBy === currentUser?.id) {
-       updateTable(table.id, { status: 'TRONG', lockedBy: null, lockedAt: null });
-    }
-    navigate('/live-entry');
-  };
-
   if (!activeSession) {
     return (
       <div className="flex flex-col h-full bg-[var(--color-bg-main)] relative">
-        <Header handleBack={handleBack} table={table} currentUser={currentUser} />
         <T1GuestSeated table={table} createSession={createSession} />
       </div>
     );
@@ -109,11 +101,9 @@ export function SessionFlow() {
   const grandTotal = calculateTotal([...pendingItems, ...sentItems, ...servedItems]);
 
   return (
-    <div className="flex flex-col h-[100dvh] bg-[var(--color-bg-main)] overflow-hidden">
+    <div className="flex flex-col h-full bg-[var(--color-bg-main)] overflow-hidden">
       {/* 1. ĐẦU MỤC QUAN TRỌNG */}
-      <div className="flex-none flex flex-col pt-3 pb-2 bg-[var(--color-bg-surface)] border-b border-[var(--color-border-main)]">
-        <Header handleBack={handleBack} table={table} currentUser={currentUser} />
-        
+      <div className="flex-none flex flex-col pb-2 bg-[var(--color-bg-surface)] border-b border-[var(--color-border-main)]">
         {/* Stages */}
         <div className="flex px-3 pt-3 gap-1 shrink-0">
           {['ORDER', 'UPSELL', 'REVIEW'].map((s, idx) => (
@@ -143,18 +133,20 @@ export function SessionFlow() {
                <button key={method} onClick={() => setPaymentMethod(method as any)} className={cn("w-full py-3 rounded-xl font-bold border-2 text-sm", paymentMethod === method ? "border-[var(--color-accent-gold)] bg-[var(--color-accent-gold)]/10 text-[var(--color-accent-gold)]" : "border-[var(--color-border-main)] text-white")}>{method}</button>
              ))}
            </div>
-           <button onClick={() => { if (paymentMethod) { checkoutSession(table.id, paymentMethod); navigate('/'); } }} disabled={!paymentMethod} className="w-full max-w-xs py-4 rounded-2xl font-black bg-[var(--color-accent-green)] text-black uppercase tracking-widest disabled:opacity-30">Hoàn Tất</button>
+           <button onClick={() => { if (paymentMethod) { checkoutSession(table.id, paymentMethod); navigate('/live-entry'); } }} disabled={!paymentMethod} className="w-full max-w-xs py-4 rounded-2xl font-black bg-[var(--color-accent-green)] text-black uppercase tracking-widest disabled:opacity-30">Hoàn Tất</button>
         </div>
       ) : (
         <div className="flex-1 flex flex-col min-h-0">
           {/* 2. MENU */}
-          <div className="flex-[4] min-h-[0px] overflow-y-auto p-3 bg-[var(--color-bg-main)]/30 custom-scrollbar border-b border-[var(--color-border-main)]">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pb-4">
+          <div className="flex-[2] min-h-[160px] overflow-x-auto overflow-y-hidden p-3 bg-[var(--color-bg-main)]/30 custom-scrollbar border-b border-[var(--color-border-main)] overscroll-x-contain">
+            <div className="flex gap-3 h-full pb-2">
               {filteredMenu.map(item => (
-                <div key={item.id} onClick={() => handleMenuClick(item)} className={cn("bg-[var(--color-bg-surface)] border p-3 rounded-xl cursor-pointer active:scale-95 transition-all shadow-md", hubStage === 'UPSELL' ? "border-[var(--color-accent-green)]/50" : "border-[var(--color-border-main)]")}>
-                  <h4 className="font-bold text-sm text-white line-clamp-2 mb-1 leading-tight">{item.displayName}</h4>
-                  <p className="text-[var(--color-accent-gold)] font-mono text-xs font-bold">{new Intl.NumberFormat('vi-VN').format(item.price)}đ</p>
-                  {hubStage === 'UPSELL' && <div className="mt-2 py-1 bg-[var(--color-accent-green)]/20 text-[var(--color-accent-green)] text-[9px] font-black uppercase text-center rounded-lg">Bấm để Gợi ý</div>}
+                <div key={item.id} onClick={() => handleMenuClick(item)} className={cn("bg-[var(--color-bg-surface)] border p-3 rounded-2xl cursor-pointer active:scale-95 transition-all shadow-md w-[40vw] max-w-[160px] shrink-0 flex flex-col justify-between", hubStage === 'UPSELL' ? "border-[var(--color-accent-green)]/50" : "border-[var(--color-border-main)]")}>
+                  <h4 className="font-bold text-sm text-white line-clamp-3 mb-1 leading-tight">{item.displayName}</h4>
+                  <div>
+                     <p className="text-[var(--color-accent-gold)] font-mono text-xs font-bold">{new Intl.NumberFormat('vi-VN').format(item.price)}đ</p>
+                     {hubStage === 'UPSELL' && <div className="mt-2 py-1 bg-[var(--color-accent-green)]/20 text-[var(--color-accent-green)] text-[9px] font-black uppercase text-center rounded-lg">Bấm để Gợi ý</div>}
+                  </div>
                 </div>
               ))}
             </div>
@@ -274,7 +266,7 @@ export function SessionFlow() {
           </div>
 
           {/* 4. ACTIONS */}
-          <div className="flex-none border-t border-[var(--color-border-main)] bg-[var(--color-bg-surface)] p-3 shrink-0 flex flex-col justify-end">
+          <div className="flex-none border-t border-[var(--color-border-main)] bg-[var(--color-bg-surface)] p-3 shrink-0 flex flex-col justify-end pb-safe">
              <div className="flex justify-between items-center mb-3 px-1">
                 <span className="text-[var(--color-text-muted)] font-black uppercase text-[10px]">TỔNG: <span className="text-[var(--color-accent-gold)] text-sm">{new Intl.NumberFormat('vi-VN').format(calculateTotal(pendingItems))}đ</span></span>
              </div>
@@ -319,15 +311,6 @@ export function SessionFlow() {
            </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function Header({ handleBack, table, currentUser }: { handleBack: () => void, table: Table, currentUser: any }) {
-  return (
-    <div className="flex items-center justify-between p-3 bg-[var(--color-bg-surface)] border-b border-[var(--color-border-main)] shrink-0">
-      <button onClick={handleBack} className="flex items-center gap-2 text-[var(--color-text-muted)] hover:text-white"><ChevronLeft className="w-5 h-5"/><span className="font-bold text-sm">QUAY LẠI</span></button>
-      <div className="text-sm font-black text-white flex items-center gap-4">BÀN {table.name} <span className="text-[10px] font-normal text-[var(--color-text-muted)] border border-[var(--color-border-main)] px-2 py-0.5 rounded-full">{currentUser?.name}</span></div>
     </div>
   );
 }

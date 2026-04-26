@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { User, Table, OrderSession, SessionItem } from '../types';
-import { MenuItemFull } from '../types/store';
+import { MenuItemFull, POSBatch } from '../types/store';
 import { mockUsers, generateMockTables } from '../data/mockData';
 import { dataStore, db } from '../services/dataStore';
 
@@ -11,6 +11,8 @@ interface AppState {
   menu: MenuItemFull[];
   tables: Table[];
   sessions: OrderSession[];
+  posBatches: POSBatch[];
+  posAggregateByPosCode: Map<string, { qty: number; revenue: number; productName: string; isInCurrentMenu: boolean }>;
   isReady: boolean;
 }
 
@@ -44,6 +46,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // Dexie live queries
   const sessions = useLiveQuery(() => db.live_sessions.toArray()) || [];
   const menu = useLiveQuery(() => db.menu_items.toArray()) || [];
+  const posBatches = useLiveQuery(() => db.pos_batches.toArray()) || [];
+
+  const posAggregateByPosCode = useMemo(() => {
+    const map = new Map();
+    const menuPosCodes = new Set(menu.map(m => m.posCode));
+    
+    for (const batch of posBatches) {
+      for (const detail of batch.details) {
+        // Strip S3P prefix if any
+        const cleanCode = String(detail.productId).replace(/^S\d+P/, '').trim();
+        const cat = String(detail.category || '');
+        // ONLY count Food items
+        if (!cat.includes('Food') && !cat.startsWith('1.')) continue;
+        
+        if (!map.has(cleanCode)) {
+          map.set(cleanCode, {
+            qty: 0, revenue: 0, productName: detail.productName,
+            isInCurrentMenu: menuPosCodes.has(cleanCode)
+          });
+        }
+        const cur = map.get(cleanCode)!;
+        cur.qty += Number(detail.quantity) || 0;
+        cur.revenue += Number(detail.finalAmount) || 0;
+      }
+    }
+    return map;
+  }, [posBatches, menu]);
 
   // Init tables on mount
   useEffect(() => {
@@ -254,7 +283,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const session = getActiveSessionByTable(tableId);
     if (!session) return;
 
-    const item = menu.find(m => m.posCode === attempt.menuItemId || m.id === attempt.menuItemId); // handle legacy id
+    const item = menu.find(m => m.posCode === attempt.menuItemId);
     const newAttempt = {
       id: `attempt_${Date.now()}`,
       staffId: currentUser?.id || 'UNKNOWN',
@@ -306,18 +335,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   const toggleMenuItemActive = async (id: string) => {
-    const item = menu.find(m => m.posCode === id || m.id === id);
+    const item = menu.find(m => m.posCode === id);
     if (!item) return;
     // We update item in dexie
     await db.menu_items.update(item.posCode, { isActive: !item.isActive });
   };
 
   const value = useMemo(() => ({
-    currentUser, users, menu, tables, sessions, isReady,
+    currentUser, users, menu, tables, sessions, isReady, posBatches, posAggregateByPosCode,
     login, logout, updateTable, createSession, updateSession, 
     addItem, updatePendingItemQty, removePendingItem, sendRoundToKitchen, serveItem, cancelItem, recordUpsellAttempt, checkoutSession,
     setMenu, toggleMenuItemActive
-  }), [currentUser, users, menu, tables, sessions, isReady]);
+  }), [currentUser, users, menu, tables, sessions, isReady, posBatches, posAggregateByPosCode]);
 
   return (
     <AppContext.Provider value={value}>

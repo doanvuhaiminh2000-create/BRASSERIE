@@ -4,6 +4,44 @@ import { MenuItemFull } from '../types/store';
 // Helper clean string
 const sanitizeStr = (s: any) => String(s || '').trim();
 
+// Normalize tên để so sánh
+function normalizeName(s: string): string {
+  return s
+    .toLowerCase()
+//    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')  // bỏ dấu Latin (Not perfectly simple without standard methods, but this is fine)
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[''`´]/g, "'")                            // chuẩn hóa nháy
+    .replace(/\s*-\s*/g, '-')                           // chuẩn hóa dấu gạch
+    .replace(/\s+/g, ' ')                               // collapse spaces
+    .replace(/[^\w\s'-]/g, '')                          // bỏ ký tự đặc biệt khác
+    .trim();
+}
+
+function levenshtein(a: string, b: string): number {
+  const m = a.length, n = b.length;
+  const dp: number[][] = Array.from({length: m+1}, () => new Array(n+1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = a[i-1] === b[j-1]
+        ? dp[i-1][j-1]
+        : 1 + Math.min(dp[i-1][j-1], dp[i-1][j], dp[i][j-1]);
+    }
+  }
+  return dp[m][n];
+}
+
+// Levenshtein-based similarity (0..1)
+function similarity(a: string, b: string): number {
+  if (a === b) return 1;
+  const longer = a.length >= b.length ? a : b;
+  const shorter = a.length >= b.length ? b : a;
+  if (longer.length === 0) return 1;
+  const dist = levenshtein(longer, shorter);
+  return (longer.length - dist) / longer.length;
+}
+
 export const parseMenuMapping = async (file: File): Promise<{ items: MenuItemFull[], errors: string[] }> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -37,7 +75,7 @@ export const parseMenuMapping = async (file: File): Promise<{ items: MenuItemFul
           if (isNaN(price)) price = 0;
 
           // Strip POS code S3P / numeric parsing issues
-          let posCode = sanitizeStr(posCodeRaw).split('.')[0]; 
+          let posCode = sanitizeStr(posCodeRaw).split('.')[0].trim(); 
 
           if (!displayNameEN || !posCode) {
              errors.push(`Row ${i + 1}: Thiếu Tên món hoặc POS Code`);
@@ -68,59 +106,116 @@ export const parseMenuMapping = async (file: File): Promise<{ items: MenuItemFul
   });
 };
 
-export const parseMenuRecipe = async (file: File, existingMenu: MenuItemFull[]): Promise<{ updatedMenu: MenuItemFull[], unmatched: string[] }> => {
+export const parseMenuRecipe = async (
+  file: File,
+  existingMenu: MenuItemFull[]
+): Promise<{
+  updatedMenu: MenuItemFull[];
+  matched: number;
+  unmatched: Array<{ recipeName: string; cost: number; price: number; suggestions: string[] }>;
+  total: number;
+}> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const workbook = XLSX.read(e.target?.result, { type: 'array' });
-        // Sheet tên 'menu'
-        const sheetName = workbook.SheetNames.find(s => s.toLowerCase() === 'menu');
-        if (!sheetName) throw new Error("Không tìm thấy sheet tên 'menu'");
-        
-        const rows: any[][] = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: '' });
+        const wb = XLSX.read(e.target?.result, { type: 'array', cellDates: false });
+        const sheetName = wb.SheetNames.find(s => s === 'menu');
+        if (!sheetName) throw new Error("Không tìm thấy sheet 'menu' (chữ thường) trong file định lượng.");
 
-        const updatedMenu = [...existingMenu];
-        const unmatched: string[] = [];
-        
-        // Header ở row 5 (index 4) -> Data từ index 5
-        for (let i = 5; i < rows.length; i++) {
-          const row = rows[i];
-          if (!row || row.length === 0) continue;
-          
-          const stt = sanitizeStr(row[1]); // col B
-          if (!stt || isNaN(Number(stt))) continue; // Bỏ qua section headers
-          
-          const displayNameEN = sanitizeStr(row[3]); // TÊN MÓN là tiếng Anh ở col D
-          const costRaw = row[6]; // GIÁ COST ở phân tích spec bảo GIÁ COST ở index 5 (col F) nhưng stt col B là 1 thì col F -> index 5
-          // C (Tên món tắt) index 2, D (Tên móm EN) index 3, E (Trống) index 4, F (ĐVT) index 5, G (GIÁ COST) index 6 ???
-          // Từ prompt: "10 cột: (A trống) | STT | Tên món tắt | TÊN MÓN | (E trống) | ĐVT | GIÁ COST | GIÁ BÁN CHƯA VAT | TỶ LỆ COST | GIÁ BÁN CÓ VAT"
-          // => A(0), B(1)-STT, C(2)-Tắt, D(3)-TÊN, E(4)-Trống, F(5)-ĐVT, G(6)-GIÁ COST
-          
-          let cost = typeof costRaw === 'number' ? costRaw : parseFloat(sanitizeStr(costRaw).replace(/,/g, ''));
-          if (isNaN(cost)) cost = 0;
+        const rows: any[][] = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { 
+          header: 1, defval: null, raw: true 
+        });
 
-          if (!displayNameEN) continue;
+        // Parse all valid recipe items first
+        const recipes: Array<{ nameEN: string; cost: number; priceVat: number; costRatio: number | null }> = [];
+        for (let i = 6; i < rows.length; i++) {
+          const r = rows[i];
+          if (!r || r.length < 10) continue;
+          const stt = r[1], nameEN = r[3], cost = r[6], ratio = r[8], priceVat = r[9];
+          if (typeof stt !== 'number' || !Number.isInteger(Math.round(stt))) continue;
+          if (!nameEN || typeof nameEN !== 'string') continue;
+          if (typeof cost !== 'number' || typeof priceVat !== 'number') continue;
+          if (cost <= 0 || priceVat <= 0) continue;
 
-          const matchIndex = updatedMenu.findIndex(m => m.displayNameEN.toLowerCase() === displayNameEN.toLowerCase());
-          
-          if (matchIndex >= 0) {
-            updatedMenu[matchIndex] = {
-              ...updatedMenu[matchIndex],
-              cost: cost || undefined,
-              costSource: 'recipe'
+          recipes.push({
+            nameEN: nameEN.trim(),
+            cost: Math.round(cost),
+            priceVat: Math.round(priceVat),
+            costRatio: typeof ratio === 'number' ? ratio : null
+          });
+        }
+
+        // Build lookup tables for menu
+        const menuByExact = new Map<string, number>();        // normalized name → index
+        existingMenu.forEach((m, idx) => {
+          const key = normalizeName(m.displayNameEN);
+          if (!menuByExact.has(key)) menuByExact.set(key, idx);
+        });
+
+        const updated = existingMenu.map(m => ({...m}));
+        const unmatched: Array<{ recipeName: string; cost: number; price: number; suggestions: string[] }> = [];
+        let matchedCount = 0;
+        const now = Date.now();
+
+        for (const rec of recipes) {
+          const normalizedRec = normalizeName(rec.nameEN);
+
+          // STEP 1: Exact normalized match
+          let foundIdx = menuByExact.get(normalizedRec);
+          let method: 'exact' | 'normalized' | 'fuzzy' = 'exact';
+
+          // STEP 2: Fuzzy match (similarity >= 0.85)
+          if (foundIdx === undefined) {
+            let bestScore = 0;
+            let bestIdx = -1;
+            for (let i = 0; i < existingMenu.length; i++) {
+              const score = similarity(normalizedRec, normalizeName(existingMenu[i].displayNameEN));
+              if (score > bestScore) {
+                bestScore = score;
+                bestIdx = i;
+              }
+            }
+            if (bestScore >= 0.85) {
+              foundIdx = bestIdx;
+              method = 'fuzzy';
+            }
+          }
+
+          if (foundIdx !== undefined && foundIdx >= 0) {
+            updated[foundIdx] = {
+              ...updated[foundIdx],
+              cost: rec.cost,
+              costRatio: rec.costRatio ?? undefined,
+              priceFromRecipe: rec.priceVat,
+              costSource: 'recipe',
+              costUpdatedAt: now,
+              recipeMatchMethod: method
             };
+            matchedCount++;
           } else {
-            unmatched.push(displayNameEN);
+            // Find top 3 suggestions for manual matching
+            const scored = existingMenu.map((m, i) => ({
+              name: m.displayNameEN,
+              idx: i,
+              score: similarity(normalizedRec, normalizeName(m.displayNameEN))
+            })).sort((a, b) => b.score - a.score).slice(0, 3);
+
+            unmatched.push({
+              recipeName: rec.nameEN,
+              cost: rec.cost,
+              price: rec.priceVat,
+              suggestions: scored.map(s => s.name)
+            });
           }
         }
-        
-        resolve({ updatedMenu, unmatched });
+
+        resolve({ updatedMenu: updated, matched: matchedCount, unmatched, total: recipes.length });
       } catch (err) {
         reject(err);
       }
     };
-    reader.onerror = (err) => reject(err);
+    reader.onerror = reject;
     reader.readAsArrayBuffer(file);
   });
 };

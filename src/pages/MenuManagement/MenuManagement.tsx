@@ -18,6 +18,7 @@ export function MenuManagement() {
   // Recipe Tab State
   const [recipeUploadStatus, setRecipeUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
   const [recipeErrorMsg, setRecipeErrorMsg] = useState<string | null>(null);
+  const [unmatchedRecipes, setUnmatchedRecipes] = useState<Array<{ recipeName: string; cost: number; price: number; suggestions: string[] }>>([]);
 
   const sections = Array.from(new Set(menu.map(m => m.section))).filter(Boolean);
 
@@ -58,21 +59,29 @@ export function MenuManagement() {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (menu.length === 0) {
+      setRecipeUploadStatus('error');
+      setRecipeErrorMsg("Vui lòng upload Menu Mapping trước khi tải file định lượng.");
+      e.target.value = '';
+      return;
+    }
+
     setRecipeUploadStatus('uploading');
     setRecipeErrorMsg(null);
+    setUnmatchedRecipes([]);
 
     try {
-      const { updatedMenu, unmatched } = await parseMenuRecipe(file, menu);
+      const { updatedMenu, unmatched, matched } = await parseMenuRecipe(file, menu);
       
       let warning = "";
       if (unmatched.length > 0) {
-        warning = `Có ${unmatched.length} món trong File Định Lượng không khớp TÊN MÓN TIẾNG ANH với dữ liệu hiện tại đang bán.`;
-        console.warn("Unmatched recipes: ", unmatched);
+        warning = `Có ${unmatched.length} món KHÔNG match tự động được. Vui lòng kiểm tra bảng bên dưới.`;
+        setUnmatchedRecipes(unmatched);
       }
 
       await setMenu(updatedMenu);
       setRecipeUploadStatus('success');
-      setRecipeErrorMsg(warning || "Áp giá cost thành công!");
+      setRecipeErrorMsg(warning || `Đã liên kết giá cost thành công ${matched} món!`);
 
       setTimeout(() => {
         setRecipeUploadStatus('idle');
@@ -86,6 +95,34 @@ export function MenuManagement() {
     }
     e.target.value = '';
   };
+
+  const handleManualMatch = async (unmatchedIdx: number, menuDisplayNameEN: string) => {
+    if (!menuDisplayNameEN) return;
+    const u = unmatchedRecipes[unmatchedIdx];
+    
+    // Find menu item and update
+    const newMenu = [...menu];
+    const matchIdx = newMenu.findIndex(m => m.displayNameEN === menuDisplayNameEN);
+    if (matchIdx >= 0) {
+      newMenu[matchIdx] = {
+        ...newMenu[matchIdx],
+        cost: u.cost,
+        priceFromRecipe: u.price,
+        costSource: 'manual',
+        recipeMatchMethod: 'manual',
+        costUpdatedAt: Date.now()
+      };
+      await setMenu(newMenu);
+    }
+    
+    // Remove from unmatched
+    setUnmatchedRecipes(prev => prev.filter((_, i) => i !== unmatchedIdx));
+  };
+
+  const skipUnmatched = (unmatchedIdx: number) => {
+    setUnmatchedRecipes(prev => prev.filter((_, i) => i !== unmatchedIdx));
+  };
+
 
   const filteredMenu = menu.filter(item => {
     const matchSearch = item.displayNameEN.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -262,6 +299,66 @@ export function MenuManagement() {
                {recipeUploadStatus === 'success' ? <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5" /> : <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />}
                <p className="text-sm font-medium">{recipeErrorMsg}</p>
                {recipeUploadStatus !== 'uploading' && <button onClick={() => setRecipeErrorMsg(null)} className="ml-auto"><X className="w-4 h-4" /></button>}
+            </div>
+          )}
+
+          {unmatchedRecipes.length > 0 && (
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-6 mb-8 shadow-lg">
+              <h3 className="text-amber-400 font-bold mb-2 flex items-center gap-2 text-lg">
+                <AlertCircle className="w-5 h-5" />
+                Cần Xử Lý {unmatchedRecipes.length} Món
+              </h3>
+              <p className="text-sm text-[var(--color-text-muted)] mb-6">
+                Những món này trong file Định lượng không có tên chính xác hoặc không đủ độ tương đồng với Menu Online. Vui lòng chọn món tương ứng từ Menu hoặc bỏ qua nếu món này không còn bán.
+              </p>
+              
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-amber-500/10 text-amber-500 text-xs uppercase tracking-wider border-b border-amber-500/30">
+                      <th className="p-3">Tên trong Định lượng</th>
+                      <th className="p-3 text-right">Mức Cost (VND)</th>
+                      <th className="p-3">Gợi ý & Chọn món</th>
+                      <th className="p-3 text-center">Hành động</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-sm">
+                    {unmatchedRecipes.map((u, i) => (
+                      <tr key={i} className="border-b border-amber-500/10 hover:bg-white/5 transition-colors">
+                        <td className="p-3 text-white font-medium">{u.recipeName}</td>
+                        <td className="p-3 text-right text-[var(--color-accent-blue)] font-bold">{u.cost.toLocaleString('vi-VN')}</td>
+                        <td className="p-3">
+                          <select 
+                            className="bg-[var(--color-bg-surface)] text-white text-xs px-3 py-2 rounded-lg border border-[var(--color-border-main)] focus:border-amber-500 outline-none w-full max-w-sm"
+                            onChange={(e) => handleManualMatch(i, e.target.value)}
+                            defaultValue=""
+                          >
+                            <option value="" disabled>-- Chọn món tương ứng --</option>
+                            <optgroup label="✨ Món có tên gần giống">
+                              {u.suggestions.map(s => (
+                                <option value={s} key={s}>★ {s}</option>
+                              ))}
+                            </optgroup>
+                            <optgroup label="Tất cả món trong Menu Online">
+                              {menu.map(m => (
+                                <option key={m.posCode} value={m.displayNameEN}>{m.displayNameEN}</option>
+                              ))}
+                            </optgroup>
+                          </select>
+                        </td>
+                        <td className="p-3 text-center">
+                          <button 
+                            onClick={() => skipUnmatched(i)}
+                            className="px-4 py-1.5 bg-white/5 hover:bg-white/10 text-[var(--color-text-muted)] hover:text-white rounded-lg text-xs font-bold transition-colors"
+                          >
+                            Bỏ qua
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useApp } from '../store/AppContext';
 import { ClockWidget } from './ClockWidget';
 import { 
@@ -11,9 +11,12 @@ import { cn } from '../lib/utils';
 export function Layout() {
   const { currentUser, logout } = useApp();
   const navigate = useNavigate();
+  const location = useLocation();
 
-  // If Staff, they should perhaps only see Live Entry module.
-  const isStaffOnly = currentUser?.role === 'staff';
+  const isLiveEntry = location.pathname.startsWith('/live-entry');
+
+  // If Staff or in Live Entry, hide sidebar
+  const hideSidebar = currentUser?.role === 'staff' || isLiveEntry;
 
   const navGroups = [
     {
@@ -50,10 +53,22 @@ export function Layout() {
     }
   ];
 
+  if (isLiveEntry) {
+    return (
+      <div className="flex h-screen-safe w-full max-w-md mx-auto shadow-2xl overflow-hidden bg-[var(--color-bg-main)] text-[var(--color-text-main)] font-sans relative">
+        <main className="flex-1 flex flex-col h-full overflow-hidden relative">
+          <div className="flex-1 overflow-hidden bg-[var(--color-bg-main)]">
+            <Outlet />
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[var(--color-bg-main)] text-[var(--color-text-main)] font-sans">
       {/* Sidebar */}
-      {!isStaffOnly && (
+      {!hideSidebar && (
         <aside className="w-64 border-r border-[var(--color-border-main)] bg-[var(--color-bg-surface)] flex flex-col shrink-0">
           <div className="p-6 border-b border-[var(--color-border-main)]">
             <div className="flex items-center gap-3">
@@ -119,7 +134,7 @@ export function Layout() {
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col h-full overflow-hidden relative">
         {/* Header - shown mainly for Staff view or quick info */}
-        {isStaffOnly && (
+        {currentUser?.role === 'staff' && (
           <header className="h-14 border-b border-[var(--color-border-main)] bg-[var(--color-bg-surface)] flex items-center justify-between px-6 shrink-0 shadow-sm">
             <div className="flex items-center gap-4">
               <div className="w-8 h-8 bg-[var(--color-accent-gold)] rounded-lg flex items-center justify-center font-bold text-black shrink-0">B</div>

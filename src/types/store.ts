@@ -69,5 +69,9 @@ export interface MenuItemFull {
   cookTime: number;
   complexity: 1 | 2 | 3;
   cost?: number;
-  costSource?: 'recipe' | 'fallback';
+  costRatio?: number;
+  priceFromRecipe?: number;
+  costSource?: 'recipe' | 'manual' | 'fallback';
+  costUpdatedAt?: number;
+  recipeMatchMethod?: 'exact' | 'normalized' | 'fuzzy' | 'manual';
 }

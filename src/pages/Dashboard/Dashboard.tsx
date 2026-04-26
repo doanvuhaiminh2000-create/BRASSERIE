@@ -8,7 +8,7 @@ import { formatCurrency, getMilestone } from '../../lib/utils';
 import { Database, TrendingUp, Users, ArrowUpRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { dataStore } from '../../services/dataStore';
-import { dashboardMetrics as DashboardMetricsType, posAggregator } from '../../services/posAggregator';
+import { DashboardMetrics, posAggregator } from '../../services/posAggregator';
 import { DateRangePicker, getDateRangeStrings } from '../../components/DateRangePicker';
 
 const COLORS = ['#D4A24E', '#5B9DF0', '#25b589', '#d44848', '#8a5cf5'];

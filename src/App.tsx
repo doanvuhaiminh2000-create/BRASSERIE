@@ -16,6 +16,10 @@ import { MenuAnalysis } from './pages/Analysis/MenuAnalysis';
 import { StaffAnalysis } from './pages/Analysis/StaffAnalysis';
 import { MenuManagement } from './pages/MenuManagement/MenuManagement';
 
+import { ToastContainer } from './components/ui/Toast';
+import { ConfirmModalContainer } from './components/ui/ConfirmModal';
+import { ConnectionStatus } from './components/ui/ConnectionStatus';
+
 // Placeholder Auth Guard
 const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactNode, allowedRoles?: string[] }) => {
   const { currentUser } = useApp();
@@ -28,26 +32,31 @@ export default function App() {
   const { currentUser } = useApp();
 
   return (
-    <Routes>
-      <Route path="/" element={currentUser ? <Navigate to={currentUser.role === 'staff' ? "/live-entry" : "/dashboard"} replace /> : <Login />} />
-      
-      <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-        <Route path="/dashboard" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><Dashboard /></ProtectedRoute>} />
-        <Route path="/live-entry/*" element={<LiveEntry />} />
+    <>
+      <ConnectionStatus />
+      <ToastContainer />
+      <ConfirmModalContainer />
+      <Routes>
+        <Route path="/" element={currentUser ? <Navigate to={currentUser.role === 'staff' ? "/live-entry" : "/dashboard"} replace /> : <Login />} />
         
-        {/* Modules */}
-        <Route path="/pos-upload" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><POSUpload /></ProtectedRoute>} />
-        <Route path="/live-history" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><SessionHistory /></ProtectedRoute>} />
-        <Route path="/analysis/upsell" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><UpsellAnalysis /></ProtectedRoute>} />
-        <Route path="/analysis/service-time" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><OperationAnalysis /></ProtectedRoute>} />
-        <Route path="/analysis/table-turnover" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><OperationAnalysis /></ProtectedRoute>} />
-        <Route path="/analysis/kitchen" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><KitchenAnalysis /></ProtectedRoute>} />
-        <Route path="/analysis/menu" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><MenuAnalysis /></ProtectedRoute>} />
-        <Route path="/analysis/staff" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><StaffAnalysis /></ProtectedRoute>} />
-        <Route path="/menu-management" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><MenuManagement /></ProtectedRoute>} />
-        <Route path="/settings" element={<div className="p-8 text-white">Cài Đặt Hệ Thống - Coming soon</div>} />
-      </Route>
-    </Routes>
+        <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+          <Route path="/dashboard" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><Dashboard /></ProtectedRoute>} />
+          <Route path="/live-entry/*" element={<LiveEntry />} />
+          
+          {/* Modules */}
+          <Route path="/pos-upload" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><POSUpload /></ProtectedRoute>} />
+          <Route path="/live-history" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><SessionHistory /></ProtectedRoute>} />
+          <Route path="/analysis/upsell" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><UpsellAnalysis /></ProtectedRoute>} />
+          <Route path="/analysis/service-time" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><OperationAnalysis /></ProtectedRoute>} />
+          <Route path="/analysis/table-turnover" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><OperationAnalysis /></ProtectedRoute>} />
+          <Route path="/analysis/kitchen" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><KitchenAnalysis /></ProtectedRoute>} />
+          <Route path="/analysis/menu" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><MenuAnalysis /></ProtectedRoute>} />
+          <Route path="/analysis/staff" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><StaffAnalysis /></ProtectedRoute>} />
+          <Route path="/menu-management" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><MenuManagement /></ProtectedRoute>} />
+          <Route path="/settings" element={<div className="p-8 text-white">Cài Đặt Hệ Thống - Coming soon</div>} />
+        </Route>
+      </Routes>
+    </>
   );
 }
 
