@@ -35,7 +35,7 @@ export function getMilestone(logs: any[], actionType: string, position: 'first' 
   }
 }
 
-export type DateRange = 'today' | 'yesterday' | '7days' | 'all' | 'custom';
+export type DateRange = 'today' | 'yesterday' | '7days' | 'thisMonth' | 'lastMonth' | 'all' | 'custom';
 
 export function isDateInRange(timestamp: number, range: DateRange, customStart?: string, customEnd?: string) {
   if (range === 'all') return true;
@@ -61,6 +61,13 @@ export function isDateInRange(timestamp: number, range: DateRange, customStart?:
     last7Days.setHours(0, 0, 0, 0);
     last7Days.setDate(now.getDate() - 7);
     return date.getTime() >= last7Days.getTime();
+  }
+  if (range === 'thisMonth') {
+    return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+  }
+  if (range === 'lastMonth') {
+    const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    return date.getMonth() === lastMonth.getMonth() && date.getFullYear() === lastMonth.getFullYear();
   }
   if (range === 'custom' && customStart && customEnd) {
     const [sYear, sMonth, sDay] = customStart.split('-').map(Number);

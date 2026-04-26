@@ -1,101 +1,118 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, 
   AreaChart, Area, PieChart, Pie, Cell 
 } from 'recharts';
 import { useApp } from '../../store/AppContext';
-import { formatCurrency, getMilestone, isDateInRange, DateRange } from '../../lib/utils';
-import { Database, TrendingUp, Clock, Users, ArrowUpRight, Calendar } from 'lucide-react';
+import { formatCurrency, getMilestone } from '../../lib/utils';
+import { Database, TrendingUp, Users, ArrowUpRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { dataStore } from '../../services/dataStore';
+import { dashboardMetrics as DashboardMetricsType, posAggregator } from '../../services/posAggregator';
+import { DateRangePicker, getDateRangeStrings } from '../../components/DateRangePicker';
 
 const COLORS = ['#D4A24E', '#5B9DF0', '#25b589', '#d44848', '#8a5cf5'];
 
 export function Dashboard() {
-  const { dashboardMetrics, sessions, tables, users } = useApp();
+  const { sessions, tables, users, isReady } = useApp();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'FINANCIAL' | 'OPERATIONAL'>('FINANCIAL');
-  const [dateFilter, setDateFilter] = useState<DateRange>('today');
+  
+  const [dateFilter, setDateFilter] = useState<string>('today');
   const [startDate, setStartDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  
+  const [dashboardMetrics, setDashboardMetrics] = useState<any>(null);
+  const [isAggregating, setIsAggregating] = useState(false);
+
+  const activeDateRange = useMemo(() => getDateRangeStrings(dateFilter, startDate, endDate), [dateFilter, startDate, endDate]);
+
+  useEffect(() => {
+    if (!isReady) return;
+    
+    let isMounted = true;
+    const fetchAndAggregate = async () => {
+      setIsAggregating(true);
+      try {
+        const batches = await dataStore.getPOSBatchesInRange(activeDateRange.start, activeDateRange.end);
+        if (batches.length === 0) {
+          if (isMounted) setDashboardMetrics(null);
+        } else {
+          const metrics = posAggregator.aggregate(batches, activeDateRange.start, activeDateRange.end);
+          if (isMounted) setDashboardMetrics(metrics);
+        }
+      } catch (err) {
+        console.error("Failed to aggregate batches: ", err);
+      } finally {
+        if (isMounted) setIsAggregating(false);
+      }
+    };
+    fetchAndAggregate();
+    return () => { isMounted = false; };
+  }, [activeDateRange, isReady]);
 
   // Filter sessions based on date range
   const filteredSessions = useMemo(() => {
-    return (sessions || []).filter(s => isDateInRange(s.openedAt, dateFilter, startDate, endDate));
-  }, [sessions, dateFilter, startDate, endDate]);
+    const startMs = new Date(activeDateRange.start).setHours(0,0,0,0);
+    const endMs = new Date(activeDateRange.end).setHours(23,59,59,999);
+    return (sessions || []).filter(s => s.openedAt >= startMs && s.openedAt <= endMs);
+  }, [sessions, activeDateRange]);
 
   // --- OPERATIONAL METRICS CALCULATION ---
   const operationalMetrics = useMemo(() => {
-    // Upsell
     let totalUpsellAttempts = 0;
     let successUpsellCount = 0;
     let upsellRevenue = 0;
     const rejectReasons: Record<string, number> = {};
 
-    // Service Time
     let totalSeatTime = 0;
     let completedSessionsCount = 0;
-
     let totalKitchenWaitTime = 0;
     let kitchenWaitPairs = 0;
-
     let totalRounds = 0;
     let sessionsWithRounds = 0;
 
-    // Financial
     let liveRevenue = 0;
     let liveCustomers = 0;
     let liveBills = 0;
 
-    // Traffic by hour
     const trafficByHour: Record<string, number> = {};
-
-    // Staff Leaderboard
     const staffStats: Record<string, { tables: number, upsellAttempts: number, upsellSuccess: number, name: string }> = {};
 
     filteredSessions.forEach(s => {
-      // Seat Time & Financials
       if (s.status === 'COMPLETED' && s.closedAt) {
         totalSeatTime += (s.closedAt - s.openedAt);
         completedSessionsCount++;
-        
         liveBills++;
         liveCustomers += s.guestCount || 0;
         liveRevenue += (s.items || []).reduce((acc, i) => acc + ((i.menuItem?.price || 0) * (i.quantity || 0)), 0);
       }
 
-      // Upsell Revenue
       (s.items || []).forEach(i => {
-        if (i.isUpsold && i.menuItem) {
+        if (i.isUpsold && i.menuItem && i.status !== 'CANCELED') {
           upsellRevenue += ((i.menuItem.price || 0) * (i.quantity || 0));
         }
       });
 
-      // Upsell Attempts
       if (Array.isArray(s.upsellAttempts)) {
         s.upsellAttempts.forEach(u => {
           totalUpsellAttempts++;
-          
           if (!staffStats[u.staffId]) {
             staffStats[u.staffId] = { tables: 0, upsellAttempts: 0, upsellSuccess: 0, name: users.find(usr => usr.id === u.staffId)?.name || u.staffId };
           }
           staffStats[u.staffId].upsellAttempts++;
-
           if (u.result === 'TC') {
             successUpsellCount++;
             staffStats[u.staffId].upsellSuccess++;
           } else {
-            if (u.reason) {
-              rejectReasons[u.reason] = (rejectReasons[u.reason] || 0) + 1;
-            }
+            if (u.reason) rejectReasons[u.reason] = (rejectReasons[u.reason] || 0) + 1;
           }
         });
       }
 
-      // Traffic
       const hour = new Date(s.openedAt).getHours() + 'h';
       trafficByHour[hour] = (trafficByHour[hour] || 0) + (s.guestCount || 0);
 
-      // Staff Tables
       if (s.openedByStaffId) {
         if (!staffStats[s.openedByStaffId]) {
           staffStats[s.openedByStaffId] = { tables: 0, upsellAttempts: 0, upsellSuccess: 0, name: users.find(usr => usr.id === s.openedByStaffId)?.name || s.openedByStaffId };
@@ -104,14 +121,12 @@ export function Dashboard() {
       }
 
       const logs = s.eventLogs || [];
-      
       const rounds = logs.filter(log => log.action === 'SEND_KITCHEN').length;
       if (rounds > 0) {
         totalRounds += rounds;
         sessionsWithRounds++;
       }
 
-      // Kitchen Speed Approximation
       const t2_log = getMilestone(logs, 'SEND_KITCHEN', 'first');
       const t6_log = getMilestone(logs, 'SERVE_ITEM', 'first');
       if (t2_log && t6_log && t6_log.time >= t2_log.time) {
@@ -141,7 +156,6 @@ export function Dashboard() {
 
   return (
     <div className="p-6 md:p-8 space-y-6 pb-20 max-w-[1600px] mx-auto">
-      {/* TABS & FILTER */}
       <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-[var(--color-border-main)] mb-6 gap-4">
         <div className="flex">
           <button 
@@ -159,43 +173,13 @@ export function Dashboard() {
           </button>
         </div>
         
-        <div className="flex flex-wrap items-center gap-3 bg-[var(--color-bg-surface)] border border-[var(--color-border-main)] rounded-xl p-1.5 focus-within:border-[var(--color-accent-gold)] focus-within:ring-1 focus-within:ring-[var(--color-accent-gold)] transition-all mb-4 md:mb-0">
-          <div className="flex items-center gap-2">
-            <Calendar className="w-5 h-5 text-[var(--color-text-muted)] ml-2" />
-            <select
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value as DateRange)}
-              className="bg-transparent border-none text-white text-sm font-bold focus:ring-0 outline-none pr-4 py-2 cursor-pointer [color-scheme:dark]"
-            >
-              <option value="today" className="bg-[var(--color-bg-surface)] text-white">Hôm nay</option>
-              <option value="yesterday" className="bg-[var(--color-bg-surface)] text-white">Hôm qua</option>
-              <option value="7days" className="bg-[var(--color-bg-surface)] text-white">7 ngày qua</option>
-              <option value="custom" className="bg-[var(--color-bg-surface)] text-white">Tùy chỉnh</option>
-              <option value="all" className="bg-[var(--color-bg-surface)] text-white">Tất cả thời gian</option>
-            </select>
-          </div>
-
-          {dateFilter === 'custom' && (
-            <div className="flex items-center gap-2 border-l border-[var(--color-border-main)] pl-3 animate-in fade-in slide-in-from-left-2 duration-300">
-              <input 
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="bg-white/10 hover:bg-white/20 border border-white/10 text-white text-xs font-medium rounded-lg px-2 py-1 focus:border-[var(--color-accent-gold)] outline-none cursor-pointer [color-scheme:dark] transition-colors"
-              />
-              <span className="text-[var(--color-text-muted)] text-xs">→</span>
-              <input 
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="bg-white/10 hover:bg-white/20 border border-white/10 text-white text-xs font-medium rounded-lg px-2 py-1 focus:border-[var(--color-accent-gold)] outline-none cursor-pointer [color-scheme:dark] transition-colors"
-              />
-            </div>
-          )}
-        </div>
+        <DateRangePicker 
+          dateFilter={dateFilter} setDateFilter={setDateFilter}
+          startDate={startDate} setStartDate={setStartDate}
+          endDate={endDate} setEndDate={setEndDate}
+        />
       </div>
 
-      {/* DASHBOARD LIVE KPIS (ALWAYS VISIBLE AND LINKED TO DATE FILTER) */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 animate-in fade-in">
          <KPICard title="Doanh Thu (Live)" value={formatCurrency(operationalMetrics.liveRevenue)} color="var(--color-accent-gold)" />
          <KPICard title="Lượt Khách (Live)" value={operationalMetrics.liveCustomers.toString()} color="var(--color-accent-blue)" />
@@ -203,28 +187,31 @@ export function Dashboard() {
          <KPICard title="AOV (Khách/Bill)" value={formatCurrency(operationalMetrics.liveAOV)} color="var(--color-accent-green)" />
       </div>
 
-      {/* --- TAB: FINANCIAL --- */}
       {activeTab === 'FINANCIAL' && (
         <>
-          {!dashboardMetrics ? (
+          {isAggregating ? (
+            <div className="w-full h-[500px] flex items-center justify-center bg-[var(--color-bg-surface)] rounded-2xl border border-[var(--color-border-main)]">
+              <span className="text-[var(--color-accent-gold)] tracking-widest uppercase font-bold animate-pulse">Đang tổng hợp dữ liệu...</span>
+            </div>
+          ) : !dashboardMetrics ? (
             <div className="w-full h-[500px] flex flex-col items-center justify-center animate-in fade-in duration-500 bg-[var(--color-bg-surface)] rounded-2xl border border-[var(--color-border-main)]">
                <Database className="w-12 h-12 text-[var(--color-text-muted)] mb-4 opacity-50" />
-               <h2 className="text-xl font-bold text-white mb-2">Chưa Có Dữ Liệu POS</h2>
-               <p className="text-[var(--color-text-muted)] text-center text-sm max-w-sm mb-6">Vui lòng tải lên báo cáo doanh thu từ máy POS để xem được các chỉ số tài chính chính xác nhất.</p>
+               <h2 className="text-xl font-bold text-white mb-2">Chưa Có Dữ Liệu POS TRONG KHOẢNG NÀY</h2>
+               <p className="text-[var(--color-text-muted)] text-center text-sm max-w-sm mb-6">Vui lòng tải lên báo cáo doanh thu từ máy POS trong mục Quản Lý Dữ Liệu POS.</p>
                <button onClick={() => navigate('/pos-upload')} className="px-6 py-2 bg-[var(--color-accent-gold)] text-black font-bold rounded-lg transition-all shadow-[0_0_15px_rgba(212,162,78,0.2)] hover:scale-105 active:scale-95 uppercase tracking-widest text-sm">
-                 Tải Lên Dữ Liệu POS
+                 Đi đến trang Upload
                </button>
             </div>
           ) : (
             <div className="space-y-6 animate-in fade-in">
               <div className="bg-[var(--color-accent-green)]/10 border border-[var(--color-accent-green)]/30 rounded-xl p-4 text-sm font-medium text-[var(--color-accent-green)] flex items-center gap-2">
-                ✓ BÁO CÁO POS ĐÃ ĐỒNG BỘ: {dashboardMetrics.totalTransactions} BILLS
+                ✓ ĐANG PHÂN TÍCH KHO DATA POS ({dashboardMetrics.totalTransactions.toLocaleString()} BILLS)
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <KPICard title="Tổng Doanh Thu" value={formatCurrency(dashboardMetrics.totalRevenue)} color="var(--color-accent-gold)" />
-                <KPICard title="Lượt Khách" value={dashboardMetrics.totalCustomers.toLocaleString()} color="var(--color-accent-blue)" />
-                <KPICard title="Số Bills" value={dashboardMetrics.totalTransactions.toLocaleString()} color="var(--color-accent-purple)" />
-                <KPICard title="Chi Tiêu Khách/Bill (AOV)" value={formatCurrency(dashboardMetrics.aov)} color="var(--color-accent-green)" />
+                <KPICard title="Tổng Doanh Thu (POS)" value={formatCurrency(dashboardMetrics.totalRevenue)} color="var(--color-accent-gold)" />
+                <KPICard title="Lượt Khách (POS)" value={dashboardMetrics.totalCustomers.toLocaleString()} color="var(--color-accent-blue)" />
+                <KPICard title="Số Giao Dịch (POS)" value={dashboardMetrics.totalTransactions.toLocaleString()} color="var(--color-accent-purple)" />
+                <KPICard title="Chi Tiêu TB/Bill" value={formatCurrency(dashboardMetrics.averageTicketSize)} color="var(--color-accent-green)" />
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -232,7 +219,7 @@ export function Dashboard() {
                   <h3 className="font-semibold text-white mb-6 uppercase tracking-wider text-sm">Lưu Lượng Theo Giờ (Dữ liệu POS)</h3>
                   <div className="h-[300px] w-full">
                     <ResponsiveContainer>
-                      <AreaChart data={dashboardMetrics.hourlyDistribution} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                      <AreaChart data={Object.entries(dashboardMetrics.hourlyTraffic).map(([h, g]) => ({ hour: h, guests: g })).sort((a,b) => parseInt(a.hour) - parseInt(b.hour))} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
                         <defs>
                           <linearGradient id="colorGuests" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="5%" stopColor="var(--color-accent-gold)" stopOpacity={0.3}/>
@@ -250,12 +237,12 @@ export function Dashboard() {
                 </div>
 
                 <div className="bg-[var(--color-bg-surface)] border border-[var(--color-border-main)] rounded-2xl p-6 shadow-sm overflow-hidden">
-                    <h3 className="font-semibold text-white mb-6 uppercase tracking-wider text-sm">Top Món Bán Chạy</h3>
+                    <h3 className="font-semibold text-white mb-6 uppercase tracking-wider text-sm">Top Món Bán Chạy (Doanh Thu)</h3>
                     <div className="space-y-4 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">
-                       {dashboardMetrics.topProducts.map((p, i) => (
+                       {dashboardMetrics.topProducts.map((p: any, i: number) => (
                           <div key={i} className="flex justify-between items-center group">
                              <div>
-                                <div className="text-sm font-medium text-white max-w-[150px] truncate">{p.name}</div>
+                                <div className="text-sm font-medium text-white max-w-[150px] truncate" title={p.name}>{p.name}</div>
                                 <div className="text-[10px] text-[var(--color-text-muted)]">{p.quantity} lượt bán</div>
                              </div>
                              <div className="text-sm font-bold text-[var(--color-accent-gold)]">{formatCurrency(p.revenue)}</div>
@@ -264,44 +251,11 @@ export function Dashboard() {
                     </div>
                 </div>
               </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <div className="bg-[var(--color-bg-surface)] border border-[var(--color-border-main)] rounded-2xl p-6 flex flex-col items-center">
-                      <h3 className="font-semibold text-white mb-2 uppercase tracking-wider text-sm">Danh Mục (Food/Bev)</h3>
-                      <div className="h-[250px] w-full">
-                        <ResponsiveContainer>
-                          <PieChart>
-                            <Pie data={dashboardMetrics.categoryStructure} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" stroke="none">
-                              {dashboardMetrics.categoryStructure.map((e, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                            </Pie>
-                            <RechartsTooltip formatter={(v: number) => formatCurrency(v)} contentStyle={{ backgroundColor: 'var(--color-bg-main)', borderColor: 'var(--color-border-main)', borderRadius: '8px' }} />
-                            <Legend />
-                          </PieChart>
-                        </ResponsiveContainer>
-                      </div>
-                  </div>
-
-                  <div className="bg-[var(--color-bg-surface)] border border-[var(--color-border-main)] rounded-2xl p-6">
-                      <h3 className="font-semibold text-white mb-6 uppercase tracking-wider text-sm">Phương Thức Thanh Toán</h3>
-                      <div className="h-[250px] w-full">
-                         <ResponsiveContainer>
-                           <BarChart data={dashboardMetrics.paymentDistribution} layout="vertical" margin={{ left: 50, right: 30 }}>
-                             <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-main)" horizontal={false} />
-                             <XAxis type="number" hide />
-                             <YAxis dataKey="name" type="category" stroke="var(--color-text-muted)" fontSize={10} width={80} />
-                             <RechartsTooltip formatter={(v: number) => formatCurrency(v)} contentStyle={{ backgroundColor: 'var(--color-bg-main)', borderColor: 'var(--color-border-main)' }} />
-                             <Bar dataKey="value" fill="var(--color-accent-blue)" radius={[0, 4, 4, 0]} />
-                           </BarChart>
-                         </ResponsiveContainer>
-                      </div>
-                  </div>
-              </div>
             </div>
           )}
         </>
       )}
 
-      {/* --- TAB: OPERATIONAL --- */}
       {activeTab === 'OPERATIONAL' && (
         <div className="space-y-6 animate-in fade-in">
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -313,8 +267,6 @@ export function Dashboard() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            
-            {/* Operational Traffic */}
             <div className="bg-[var(--color-bg-surface)] border border-[var(--color-border-main)] rounded-2xl p-6 lg:col-span-2 shadow-sm">
               <h3 className="font-semibold text-white mb-6 uppercase tracking-wider text-sm flex items-center gap-2">
                 <TrendingUp className="w-4 h-4 text-[var(--color-accent-blue)]" /> Lưu lượng khách thực tế (Live)
@@ -332,7 +284,6 @@ export function Dashboard() {
               </div>
             </div>
 
-            {/* Upsell Reasons */}
             <div className="bg-[var(--color-bg-surface)] border border-[var(--color-border-main)] rounded-2xl p-6 shadow-sm overflow-hidden flex flex-col">
                 <h3 className="font-semibold text-white mb-2 uppercase tracking-wider text-sm flex items-center gap-2">
                   <ArrowUpRight className="w-4 h-4 text-[var(--color-accent-green)]" /> Hiệu Quả Upsell: {operationalMetrics.upsellRate.toFixed(1)}%
@@ -408,7 +359,7 @@ function KPICard({ title, value, color }: { title: string, value: string | numbe
         {title}
       </p>
       <div className="flex items-end gap-2">
-        <h4 className="text-3xl font-black text-white tracking-tighter">{value}</h4>
+        <h4 className="text-3xl font-black text-white tracking-tighter truncate" title={String(value)}>{value}</h4>
       </div>
     </div>
   );
