@@ -22,7 +22,10 @@ export function SessionFlow() {
   const [hubStage, setHubStage] = useState<'ORDER' | 'UPSELL' | 'REVIEW'>('ORDER');
   
   // Left column state (Menu)
-  const [selectedCategory, setSelectedCategory] = useState<string>('Pizza');
+  const [selectedSection, setSelectedSection] = useState<string>(() => {
+    const defaultSec = menu.find(m => m.isActive)?.section;
+    return defaultSec || 'APPETIZER';
+  });
   const [searchQuery, setSearchQuery] = useState('');
 
   // Right column modals/state
@@ -58,11 +61,11 @@ export function SessionFlow() {
     );
   }
 
-  const categories = Array.from(new Set(menu.map(m => m.category)));
+  const sections = Array.from(new Set(menu.filter(m => m.isActive).map(m => m.section)));
   const filteredMenu = menu.filter(m => {
-    const matchesCategory = m.category === selectedCategory;
+    const matchesSection = m.section === selectedSection;
     const matchesSearch = m.displayName.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
+    return m.isActive && matchesSection && matchesSearch;
   });
 
   const handleMenuClick = (item: any) => {
@@ -120,11 +123,11 @@ export function SessionFlow() {
           ))}
         </div>
 
-        {/* Categories */}
+        {/* Sections */}
         <div className="flex overflow-x-auto gap-2 px-3 pt-3 custom-scrollbar pb-1 shrink-0">
-          {categories.map(cat => (
-            <button key={cat} onClick={() => setSelectedCategory(cat)} className={cn("px-4 py-1.5 rounded-full font-bold text-[11px] uppercase transition-all whitespace-nowrap border text-white", selectedCategory === cat ? "bg-[var(--color-accent-gold)] text-black border-[var(--color-accent-gold)]" : "bg-[var(--color-bg-main)] text-[var(--color-text-muted)] hover:text-white border-[var(--color-border-main)]")}>
-              {cat}
+          {sections.map(sec => (
+            <button key={sec} onClick={() => setSelectedSection(sec)} className={cn("px-4 py-1.5 rounded-full font-bold text-[11px] uppercase transition-all whitespace-nowrap border text-white", selectedSection === sec ? "bg-[var(--color-accent-gold)] text-black border-[var(--color-accent-gold)]" : "bg-[var(--color-bg-main)] text-[var(--color-text-muted)] hover:text-white border-[var(--color-border-main)]")}>
+              {sec}
             </button>
           ))}
         </div>

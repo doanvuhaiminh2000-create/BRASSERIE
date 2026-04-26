@@ -15,11 +15,13 @@ export function Dashboard() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'FINANCIAL' | 'OPERATIONAL'>('FINANCIAL');
   const [dateFilter, setDateFilter] = useState<DateRange>('today');
+  const [startDate, setStartDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
   // Filter sessions based on date range
   const filteredSessions = useMemo(() => {
-    return (sessions || []).filter(s => isDateInRange(s.openedAt, dateFilter));
-  }, [sessions, dateFilter]);
+    return (sessions || []).filter(s => isDateInRange(s.openedAt, dateFilter, startDate, endDate));
+  }, [sessions, dateFilter, startDate, endDate]);
 
   // --- OPERATIONAL METRICS CALCULATION ---
   const operationalMetrics = useMemo(() => {
@@ -157,18 +159,39 @@ export function Dashboard() {
           </button>
         </div>
         
-        <div className="flex items-center gap-2 bg-[var(--color-bg-surface)] border border-[var(--color-border-main)] rounded-xl p-1.5 focus-within:border-[var(--color-accent-gold)] focus-within:ring-1 focus-within:ring-[var(--color-accent-gold)] transition-all mb-4 md:mb-0">
-          <Calendar className="w-5 h-5 text-[var(--color-text-muted)] ml-2" />
-          <select
-            value={dateFilter}
-            onChange={(e) => setDateFilter(e.target.value as DateRange)}
-            className="bg-transparent border-none text-white text-sm font-bold focus:ring-0 outline-none pr-4 py-2 cursor-pointer"
-          >
-            <option value="today">Hôm nay</option>
-            <option value="yesterday">Hôm qua</option>
-            <option value="7days">7 ngày qua</option>
-            <option value="all">Tất cả thời gian</option>
-          </select>
+        <div className="flex flex-wrap items-center gap-3 bg-[var(--color-bg-surface)] border border-[var(--color-border-main)] rounded-xl p-1.5 focus-within:border-[var(--color-accent-gold)] focus-within:ring-1 focus-within:ring-[var(--color-accent-gold)] transition-all mb-4 md:mb-0">
+          <div className="flex items-center gap-2">
+            <Calendar className="w-5 h-5 text-[var(--color-text-muted)] ml-2" />
+            <select
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value as DateRange)}
+              className="bg-transparent border-none text-white text-sm font-bold focus:ring-0 outline-none pr-4 py-2 cursor-pointer [color-scheme:dark]"
+            >
+              <option value="today" className="bg-[var(--color-bg-surface)] text-white">Hôm nay</option>
+              <option value="yesterday" className="bg-[var(--color-bg-surface)] text-white">Hôm qua</option>
+              <option value="7days" className="bg-[var(--color-bg-surface)] text-white">7 ngày qua</option>
+              <option value="custom" className="bg-[var(--color-bg-surface)] text-white">Tùy chỉnh</option>
+              <option value="all" className="bg-[var(--color-bg-surface)] text-white">Tất cả thời gian</option>
+            </select>
+          </div>
+
+          {dateFilter === 'custom' && (
+            <div className="flex items-center gap-2 border-l border-[var(--color-border-main)] pl-3 animate-in fade-in slide-in-from-left-2 duration-300">
+              <input 
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="bg-white/10 hover:bg-white/20 border border-white/10 text-white text-xs font-medium rounded-lg px-2 py-1 focus:border-[var(--color-accent-gold)] outline-none cursor-pointer [color-scheme:dark] transition-colors"
+              />
+              <span className="text-[var(--color-text-muted)] text-xs">→</span>
+              <input 
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="bg-white/10 hover:bg-white/20 border border-white/10 text-white text-xs font-medium rounded-lg px-2 py-1 focus:border-[var(--color-accent-gold)] outline-none cursor-pointer [color-scheme:dark] transition-colors"
+              />
+            </div>
+          )}
         </div>
       </div>
 

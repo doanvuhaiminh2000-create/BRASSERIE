@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
 import { Database, Upload, FileText, CheckCircle2, AlertCircle, Calendar } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { parseFile, processPOSData } from '../../lib/posDataParser';
+import { parseFile, processPOSData, parseExcelMultiSheet } from '../../lib/posDataParser';
 import { useApp } from '../../store/AppContext';
 import { useNavigate } from 'react-router-dom';
 import Papa from 'papaparse';
-import { parseFile, processPOSData, parseExcelMultiSheet } from '../../lib/posDataParser';
 
 export function POSUpload() {
   const [dragActive, setDragActive] = useState(false);

@@ -127,7 +127,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       currentRound: 1,
       eventLogs: [
         {
-          id: `log_${Date.now()}`,
+          id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
           time: Date.now(),
           staffId: currentUser?.id || 'UNKNOWN',
           staffName: currentUser?.name || 'UNKNOWN',
@@ -177,7 +177,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
 
         const newLog = {
-          id: `log_${Date.now()}`,
+          id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
           time: Date.now(),
           staffId: currentUser?.id || 'UNKNOWN',
           staffName: currentUser?.name || 'UNKNOWN',
@@ -231,7 +231,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
         const updatedItems = s.items.map(i => i.status === 'PENDING' ? { ...i, status: 'SENT' as const, sentAt: Date.now() } : i);
         const newLog = {
-          id: `log_${Date.now()}`,
+          id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
           time: Date.now(),
           staffId: currentUser?.id || 'UNKNOWN',
           staffName: currentUser?.name || 'UNKNOWN',
@@ -258,7 +258,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
         const updatedItems = s.items.map(i => i.id === itemId ? { ...i, status: 'SERVED' as const } : i);
         const newLog = {
-          id: `log_${Date.now()}`,
+          id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
           time: Date.now(),
           staffId: currentUser?.id || 'UNKNOWN',
           staffName: currentUser?.name || 'UNKNOWN',
@@ -283,7 +283,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
         const updatedItems = s.items.map(i => i.id === itemId ? { ...i, status: 'CANCELED' as const, cancelReason: reason } : i);
         const newLog = {
-          id: `log_${Date.now()}`,
+          id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
           time: Date.now(),
           staffId: currentUser?.id || 'UNKNOWN',
           staffName: currentUser?.name || 'UNKNOWN',
@@ -314,7 +314,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           timestamp: Date.now()
         };
         const newLog = {
-          id: `log_${Date.now()}`,
+          id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
           time: Date.now(),
           staffId: currentUser?.id || 'UNKNOWN',
           staffName: currentUser?.name || 'UNKNOWN',
@@ -335,7 +335,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setSessions(prev => prev.map(s => {
       if (s.tableId === tableId && s.status === 'ACTIVE') {
         const newLog = {
-          id: `log_${Date.now()}`,
+          id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
           time: Date.now(),
           staffId: currentUser?.id || 'UNKNOWN',
           staffName: currentUser?.name || 'UNKNOWN',
