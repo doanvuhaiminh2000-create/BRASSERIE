@@ -5,6 +5,7 @@ import { parseFile, processPOSData } from '../../lib/posDataParser';
 import { useApp } from '../../store/AppContext';
 import { useNavigate } from 'react-router-dom';
 import Papa from 'papaparse';
+import { parseFile, processPOSData, parseExcelMultiSheet } from '../../lib/posDataParser';
 
 export function POSUpload() {
   const [dragActive, setDragActive] = useState(false);
@@ -13,7 +14,7 @@ export function POSUpload() {
   const [activeTab, setActiveTab] = useState<'daily' | 'monthly'>('monthly');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const { setDashboardMetrics } = useApp();
+  const { setDashboardMetrics, setPosRawData } = useApp();
   const navigate = useNavigate();
   
   const [formData, setFormData] = useState({
@@ -62,38 +63,51 @@ export function POSUpload() {
       let errorDetails = "";
 
       for (const file of files) {
-        const data = await parseFile<any>(file);
+        const isExcel = /\.(xlsx|xls)$/i.test(file.name);
         
-        if (data.length === 0) {
-          errorDetails += `File ${file.name} trống hoặc không đọc được. `;
-          continue;
-        }
-
-        const csvString = Papa.unparse(data);
-
-        // Extract sample keys to guess file type
-        const sampleKeys = Object.keys(data[0] || {}).map(k => k.toLowerCase()).join(' ');
-
-        if (sampleKeys.includes('customer') || sampleKeys.includes('time start') || file.name.toLowerCase().includes('summary')) {
-          summaryData = csvString;
-        } else if (sampleKeys.includes('product name') || sampleKeys.includes('category') || file.name.toLowerCase().includes('detail')) {
-          detailData = csvString;
-        } else if (sampleKeys.includes('payment method') || sampleKeys.includes('tender') || file.name.toLowerCase().includes('payment')) {
-          paymentData = csvString;
+        if (isExcel) {
+          const sheets = await parseExcelMultiSheet(file);
+          Object.entries(sheets).forEach(([name, data]) => {
+            const lower = name.toLowerCase();
+            if (lower.includes('summary')) summaryData = Papa.unparse(data as any[]);
+            else if (lower.includes('payment')) paymentData = Papa.unparse(data as any[]);
+            else if (lower.includes('detail')) detailData = Papa.unparse(data as any[]);
+          });
         } else {
-          // Fallback based on content if name is ambiguous
-          if (!summaryData) summaryData = csvString;
-          else if (!detailData) detailData = csvString;
-          else paymentData = csvString;
+          const data = await parseFile<any>(file);
+          
+          if (data.length === 0) {
+            errorDetails += `File ${file.name} trống hoặc không đọc được. `;
+            continue;
+          }
+
+          const csvString = Papa.unparse(data);
+
+          // Extract sample keys to guess file type
+          const sampleKeys = Object.keys(data[0] || {}).map(k => k.toLowerCase()).join(' ');
+
+          if (sampleKeys.includes('time start') || sampleKeys.includes('final total') || file.name.toLowerCase().includes('summary')) {
+            summaryData = csvString;
+          } else if (sampleKeys.includes('product name') || sampleKeys.includes('final amout') || sampleKeys.includes('category') || file.name.toLowerCase().includes('detail')) {
+            detailData = csvString;
+          } else if (sampleKeys.includes('payment method') || sampleKeys.includes('tender') || file.name.toLowerCase().includes('payment')) {
+            paymentData = csvString;
+          } else {
+            // Fallback based on content if name is ambiguous
+            if (!summaryData) summaryData = csvString;
+            else if (!detailData) detailData = csvString;
+            else paymentData = csvString;
+          }
         }
       }
 
       if (!summaryData) {
-        throw new Error(`Không tìm thấy dữ liệu Summary. Vui lòng tải lên file Summary hợp lệ. ${errorDetails}`);
+        throw new Error(`Không tìm thấy sheet 'Transaction summary' trong file. File POS phải có 3 sheets: Transaction summary, Transaction detail, Payment detail. ${errorDetails}`);
       }
 
-      const metrics = processPOSData(summaryData, detailData, paymentData);
+      const { metrics, detailRows } = processPOSData(summaryData, detailData, paymentData);
       setDashboardMetrics(metrics);
+      setPosRawData({ detailRows, uploadedAt: Date.now() });
       
       setUploadStatus('success');
       

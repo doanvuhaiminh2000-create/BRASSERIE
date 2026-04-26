@@ -14,6 +14,7 @@ import { OperationAnalysis } from './pages/Analysis/OperationAnalysis';
 import { KitchenAnalysis } from './pages/Analysis/KitchenAnalysis';
 import { MenuAnalysis } from './pages/Analysis/MenuAnalysis';
 import { StaffAnalysis } from './pages/Analysis/StaffAnalysis';
+import { MenuManagement } from './pages/MenuManagement/MenuManagement';
 
 // Placeholder Auth Guard
 const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactNode, allowedRoles?: string[] }) => {
@@ -43,6 +44,7 @@ export default function App() {
         <Route path="/analysis/kitchen" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><KitchenAnalysis /></ProtectedRoute>} />
         <Route path="/analysis/menu" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><MenuAnalysis /></ProtectedRoute>} />
         <Route path="/analysis/staff" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><StaffAnalysis /></ProtectedRoute>} />
+        <Route path="/menu-management" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><MenuManagement /></ProtectedRoute>} />
         <Route path="/settings" element={<div className="p-8 text-white">Cài Đặt Hệ Thống - Coming soon</div>} />
       </Route>
     </Routes>

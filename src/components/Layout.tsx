@@ -42,8 +42,9 @@ export function Layout() {
       ]
     },
     {
-      title: "Cài Đặt",
+      title: "Cấu Hình",
       items: [
+        { name: "Quản Lý Menu", path: "/menu-management", icon: ClipboardList, roles: ['admin', 'manager'] },
         { name: "Cài Đặt Hệ Thống", path: "/settings", icon: Settings, roles: ['admin'] },
       ]
     }

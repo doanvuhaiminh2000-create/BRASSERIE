@@ -11,27 +11,37 @@ export const mockUsers: User[] = [
 ];
 
 export const mockMenu: MenuItem[] = [
-  // PIZZA (P)
-  { id: 'p1', posName: 'Signature Pizza', displayName: 'Signature Pizza', category: 'Pizza', station: 'P', price: 300000, cost: 80000, cookTime: 12, complexity: 2 },
-  { id: 'p2', posName: 'Pizza Margherita', displayName: 'Pizza Margherita', category: 'Pizza', station: 'P', price: 200000, cost: 50000, cookTime: 10, complexity: 1 },
-  { id: 'p3', posName: 'Pizza Gà BBQ', displayName: 'Pizza Gà BBQ', category: 'Pizza', station: 'P', price: 250000, cost: 70000, cookTime: 12, complexity: 2 },
-  { id: 'p4', posName: 'Pizza Hải Sản', displayName: 'Pizza Hải Sản', category: 'Pizza', station: 'P', price: 300000, cost: 100000, cookTime: 14, complexity: 3 },
-  
-  // PASTA (N)
-  { id: 'pa1', posName: 'Signature Spaghetti', displayName: 'Signature Spaghetti', category: 'Pasta', station: 'N', price: 350000, cost: 90000, cookTime: 15, complexity: 2 },
-  { id: 'pa2', posName: 'Mỳ Ý Bò Bằm', displayName: 'Mỳ Ý Bò Bằm', category: 'Pasta', station: 'N', price: 240000, cost: 60000, cookTime: 10, complexity: 1 },
-  
-  // SALAD (L)
-  { id: 's1', posName: 'Salad Gà Và Hạt', displayName: 'Salad Gà Và Hạt', category: 'Salad', station: 'L', price: 180000, cost: 40000, cookTime: 5, complexity: 1 },
-  { id: 's2', posName: 'Salad Tôm Nướng', displayName: 'Salad Tôm Nướng', category: 'Salad', station: 'L', price: 200000, cost: 60000, cookTime: 7, complexity: 2 },
-  
-  // DRINKS (B)
-  { id: 'd1', posName: 'Coke', displayName: 'Coke', category: 'Đồ Uống', station: 'B', price: 60000, cost: 15000, cookTime: 2, complexity: 1 },
-  { id: 'd2', posName: 'Sinh Tố Xoài', displayName: 'Sinh Tố Xoài', category: 'Đồ Uống', station: 'B', price: 80000, cost: 25000, cookTime: 5, complexity: 1 },
-  { id: 'd3', posName: 'Bia Tiger', displayName: 'Bia Tiger', category: 'Đồ Uống', station: 'B', price: 55000, cost: 20000, cookTime: 2, complexity: 1 },
-
-  // MAIN (N)
-  { id: 'm1', posName: 'Bò Nướng Wagyu', displayName: 'Bò Nướng Wagyu', category: 'Main Course', station: 'N', price: 600000, cost: 250000, cookTime: 20, complexity: 3 }
+  // Fallback only — sẽ bị thay khi user upload Menu_online.xlsx tại /menu-management.
+  { 
+    id: 'DEMO_001', posCode: 'DEMO_001', posName: 'Salad Tôm Nướng', displayNameEN: 'Grilled Shrimp Salad', 
+    displayName: 'Salad Tôm Nướng', section: 'APPETIZER', category: 'F14 - SALAD', 
+    price: 180000, cost: 50000, isActive: true, station: 'L', cookTime: 7, complexity: 1 
+  },
+  { 
+    id: 'DEMO_002', posCode: 'DEMO_002', posName: 'Pizza Gà BBQ', displayNameEN: 'BBQ Chicken Pizza', 
+    displayName: 'Pizza Gà BBQ', section: 'BURGER, PASTA, PIZZA', category: 'F23 - PIZZA', 
+    price: 250000, cost: 70000, isActive: true, station: 'P', cookTime: 12, complexity: 2 
+  },
+  { 
+    id: 'DEMO_003', posCode: 'DEMO_003', posName: 'Signature Spaghetti', displayNameEN: 'Signature Spaghetti', 
+    displayName: 'Signature Spaghetti', section: 'BURGER, PASTA, PIZZA', category: 'F22 - NOODLES', 
+    price: 350000, cost: 90000, isActive: true, station: 'N', cookTime: 15, complexity: 2 
+  },
+  { 
+    id: 'DEMO_004', posCode: 'DEMO_004', posName: 'Burger Bò', displayNameEN: 'Beef Burger', 
+    displayName: 'Burger Bò', section: 'BURGER, PASTA, PIZZA', category: 'F05 - BURGER', 
+    price: 220000, cost: 60000, isActive: true, station: 'N', cookTime: 10, complexity: 2 
+  },
+  { 
+    id: 'DEMO_005', posCode: 'DEMO_005', posName: 'Bò Nướng Wagyu', displayNameEN: 'Grilled Wagyu Beef', 
+    displayName: 'Bò Nướng Wagyu', section: 'MAIN DISHES', category: 'F25 - MAIN COURSE', 
+    price: 600000, cost: 200000, isActive: true, station: 'N', cookTime: 20, complexity: 3 
+  },
+  { 
+    id: 'DEMO_006', posCode: 'DEMO_006', posName: 'Kem Vani', displayNameEN: 'Vanilla Ice Cream', 
+    displayName: 'Kem Vani', section: 'DESSERTS', category: 'F01 - A LA CARTE', 
+    price: 80000, cost: 20000, isActive: true, station: 'B', cookTime: 5, complexity: 1 
+  }
 ];
 
 export const generateMockTables = (): Table[] => {

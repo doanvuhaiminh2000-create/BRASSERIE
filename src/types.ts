@@ -20,16 +20,38 @@ export interface Table {
   currentSessionId?: string | null;
 }
 
+export type MenuSection = 'APPETIZER' | 'BURGER, PASTA, PIZZA' | 'MAIN DISHES' | 'PREMIUM' | 'DESSERTS';
+
+export type MenuPOSCategory =
+  | 'F04 - BREAD' | 'F17 - SOUP' | 'F14 - SALAD' | 'F23 - PIZZA'
+  | 'F22 - NOODLES' | 'F25 - MAIN COURSE' | 'F05 - BURGER'
+  | 'F10 - GRILLED' | 'F01 - A LA CARTE';
+
 export interface MenuItem {
-  id: string;
-  posName: string;
-  displayName: string;
-  category: 'Pizza' | 'Pasta' | 'Burger' | 'Main Course' | 'Salad' | 'Soup' | 'Side' | 'Đồ Uống';
+  id: string;                    // = posCode để đảm bảo unique
+  posCode: string;               // PRODNUM, ví dụ "2146446156"
+  posName: string;               // "SALAD PHO MAI BURRATA"
+  displayNameEN: string;         // "Burrata Salad"
+  displayName: string;           // "Salad Phô Mai Burrata"
+  section: MenuSection;
+  category: MenuPOSCategory;
+  price: number;                 // VND, có VAT
+  cost?: number;                 // optional, sẽ map từ file định lượng sau
+  isActive: boolean;
   station: 'P' | 'N' | 'L' | 'B';
-  price: number;
-  cost: number;
-  cookTime: number; // minutes
-  complexity: 1 | 2 | 3;
+  cookTime: number;              // mặc định 10 nếu chưa biết
+  complexity: 1 | 2 | 3;         // mặc định 2
+}
+
+export interface POSRawData {
+  detailRows: Array<{
+    productId: string;       // POS Product ID
+    productName: string;
+    quantity: number;
+    finalAmount: number;
+    timeOrder: string;
+  }>;
+  uploadedAt: number;
 }
 
 export interface SessionItem {

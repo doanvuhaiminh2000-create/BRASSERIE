@@ -14,6 +14,8 @@ export interface DetailRow {
   'Transaction': string;
   'Category': string;
   'Product name': string;
+  'Product ID'?: string;
+  'Time Order'?: string;
   'Quantity': number | string;
   'Final Amout'?: number | string; 
   'Final Amount'?: number | string;
@@ -65,12 +67,30 @@ const getVal = (row: any, possibleKeys: string[]) => {
   return null;
 };
 
+export const parseExcelMultiSheet = (file: File): Promise<Record<string, any[]>> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const workbook = XLSX.read(e.target?.result, { type: 'array', cellDates: true });
+        const result: Record<string, any[]> = {};
+        workbook.SheetNames.forEach(sn => {
+          result[sn] = XLSX.utils.sheet_to_json(workbook.Sheets[sn], { defval: '', raw: false });
+        });
+        resolve(result);
+      } catch (err) { reject(err); }
+    };
+    reader.onerror = (err) => reject(err);
+    reader.readAsArrayBuffer(file);
+  });
+};
+
 // Main processing function
 export const processPOSData = (
   summaryText: string,
   detailText: string,
   paymentText: string
-): DashboardMetrics => {
+): { metrics: DashboardMetrics, detailRows: any[] } => {
   const summaryData = Papa.parse<any>(summaryText, { header: true, skipEmptyLines: 'greedy' }).data;
   const detailData = Papa.parse<any>(detailText, { header: true, skipEmptyLines: 'greedy' }).data;
   const paymentData = Papa.parse<any>(paymentText, { header: true, skipEmptyLines: 'greedy' }).data;
@@ -78,52 +98,83 @@ export const processPOSData = (
   // Overview
   let totalRevenue = 0;
   let totalCustomers = 0;
+  let validBillsCount = 0;
   const uniqueTransactions = new Set<string>();
   const hourlyMap: Record<string, number> = {};
 
   (summaryData || []).forEach(row => {
-    const trx = getVal(row, ['Transaction']);
-    if (!trx || String(trx).trim() === '') return;
+    const trxRaw = getVal(row, ['Transaction']);
+    if (!trxRaw || String(trxRaw).trim() === '') return;
     
-    uniqueTransactions.add(String(trx).trim());
+    const trx = String(trxRaw).trim();
+    if (isNaN(Number(trx))) return; // Bỏ qua nếu Transaction không phải số
     
-    // Revenue
-    totalRevenue += parseNumeric(getVal(row, ['Final Total', 'Total', 'Thành tiền']), 0);
-    
-    // Customers (Logic: rỗng hoặc 0 -> 1)
+    const timeStartRaw = String(getVal(row, ['Time Start', 'Thời gian']) || '');
+    if (timeStartRaw.toLowerCase() === 'total') return; // Bỏ qua dòng Total
+
+    let total = parseNumeric(getVal(row, ['Final Total', 'Total', 'Thành tiền']), 0);
     let cust = parseNumeric(getVal(row, ['Customer', 'Khách']), 0);
-    cust = Math.max(1, cust);
+
+    if (cust === 0 && total === 0) return; // Bỏ qua bills hủy
+
+    // Cap Customer tối đa 50
+    cust = Math.min(Math.max(1, cust), 50);
+
+    uniqueTransactions.add(trx);
+    validBillsCount++;
+    totalRevenue += total;
     totalCustomers += cust;
 
     // Hourly
-    const timeStart = String(getVal(row, ['Time Start', 'Thời gian']) || '');
-    const hourMatch = timeStart.match(/(\d{1,2}):\d{2}/);
-    if (hourMatch) {
-       const h = hourMatch[1].padStart(2, '0') + 'h';
-       hourlyMap[h] = (hourlyMap[h] || 0) + cust;
+    let hour = '';
+    const rawTimeValue = getVal(row, ['Time Start', 'Thời gian']);
+    const dateObj = new Date(rawTimeValue);
+    if (rawTimeValue && !isNaN(dateObj.getTime())) {
+      hour = dateObj.getHours().toString().padStart(2, '0') + 'h';
+    } else {
+      const hourMatch = timeStartRaw.match(/(\d{1,2}):\d{2}/);
+      if (hourMatch) {
+         hour = hourMatch[1].padStart(2, '0') + 'h';
+      }
     }
+    if (hour) hourlyMap[hour] = (hourlyMap[hour] || 0) + cust;
   });
 
   // Details
   let foodRevenue = 0;
   let beverageRevenue = 0;
   const productMap: Record<string, { revenue: number, quantity: number }> = {};
+  const detailRows: any[] = [];
 
   (detailData || []).forEach(row => {
     const trx = getVal(row, ['Transaction']);
     if (!trx || String(trx).trim() === '') return;
 
-    // Amount fallback: Final Amout | Final Amount | Net Amout
+    // Giữ nguyên typo Final Amout
     const amount = parseNumeric(getVal(row, ['Final Amout', 'Final Amount', 'Net Amout', 'Thành tiền']), 0);
     const category = String(getVal(row, ['Category', 'Loại']) || '').toLowerCase();
     const productName = String(getVal(row, ['Product name', 'Tên sản phẩm']) || 'Unknown');
     const qty = parseNumeric(getVal(row, ['Quantity', 'Số lượng']), 0);
+    
+    const productId = String(getVal(row, ['Product ID', 'Mã sản phẩm']) || '');
+    const timeOrder = String(getVal(row, ['Time Order', 'Thời gian']) || '');
+
+    detailRows.push({
+      productId,
+      productName,
+      quantity: qty,
+      finalAmount: amount,
+      timeOrder
+    });
 
     // Categories
     if (category.includes('1. food') || category.includes('food')) {
-      foodRevenue += amount;
+       foodRevenue += amount;
     } else if (category.includes('2. beverage') || category.includes('beverage')) {
-      beverageRevenue += amount;
+       beverageRevenue += amount;
+    } else if (category.includes('4. service') || category.includes('5. good')) {
+       // Tùy chọn gom vào categoryStructure, nếu muốn. Nhưng đặc tả yêu cầu "1. Food, 2. Beverage, 4. Service Other, 5. Good Other, Coupon".
+       // Tạm lưu nhóm.
     }
 
     // Top Products
@@ -133,6 +184,20 @@ export const processPOSData = (
     productMap[productName].revenue += amount;
     productMap[productName].quantity += qty;
   });
+
+  // Re-calculate categories exactly
+  const categoryMapForOutput: Record<string, number> = {};
+  (detailData || []).forEach(row => {
+    const trx = getVal(row, ['Transaction']);
+    if (!trx || String(trx).trim() === '') return;
+    const amount = parseNumeric(getVal(row, ['Final Amout', 'Final Amount', 'Net Amout', 'Thành tiền']), 0);
+    const category = String(getVal(row, ['Category', 'Loại']) || '').trim() || 'Unknown';
+    categoryMapForOutput[category] = (categoryMapForOutput[category] || 0) + amount;
+  });
+  
+  const categoryStructure = Object.entries(categoryMapForOutput)
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value);
 
   // Payments
   const paymentMap: Record<string, number> = {};
@@ -148,12 +213,7 @@ export const processPOSData = (
   // Formatting Output
   const hourlyDistribution = Object.entries(hourlyMap)
     .map(([hour, guests]) => ({ hour, guests }))
-    .sort((a, b) => a.hour.localeCompare(b.hour));
-
-  const categoryStructure = [
-    { name: 'Food', value: foodRevenue },
-    { name: 'Beverage', value: beverageRevenue }
-  ];
+    .sort((a, b) => parseInt(a.hour) - parseInt(b.hour)); // Sort theo giờ
 
   const topProducts = Object.entries(productMap)
     .map(([name, stats]) => ({ name, ...stats }))
@@ -164,18 +224,22 @@ export const processPOSData = (
     .map(([name, value]) => ({ name, value }))
     .sort((a, b) => b.value - a.value);
 
-  return {
+  const metrics = {
     totalRevenue,
     totalCustomers,
     totalTransactions: uniqueTransactions.size,
-    totalBills: uniqueTransactions.size,
-    aov: totalCustomers > 0 ? totalRevenue / totalCustomers : 0,
+    totalBills: validBillsCount, // Bill tổng hợp
+    aov: totalBillsCountIfAny(validBillsCount, totalRevenue),
     hourlyDistribution,
     categoryStructure,
     topProducts,
     paymentDistribution
   };
+  
+  return { metrics, detailRows };
 };
+
+const totalBillsCountIfAny = (bills: number, rev: number) => bills > 0 ? rev / bills : 0;
 
 // Legacy support or File-based parsing
 export const parseFile = <T>(file: File): Promise<T[]> => {
@@ -216,5 +280,5 @@ export const calculateDashboardMetrics = (
     Papa.unparse(summaryData),
     Papa.unparse(detailData),
     ""
-  );
+  ).metrics;
 };

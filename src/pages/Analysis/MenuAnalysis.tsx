@@ -5,35 +5,59 @@ import { formatCurrency } from '../../lib/utils';
 import { useApp } from '../../store/AppContext';
 
 export function MenuAnalysis() {
-  const { menu } = useApp();
+  const { menu, posRawData } = useApp();
 
-  // Mocking recent sales volume per menu item
-  const analyzeMenu = () => {
-    return menu.map(m => {
-      const margin = m.price - (m.cost || (m.price * 0.3));
+  const menuMatrix = React.useMemo(() => {
+    if (!menu.length) return [];
+
+    // Build volume map từ POS detail
+    const volumeMap: Record<string, { qty: number; revenue: number }> = {};
+    if (posRawData?.detailRows) {
+      posRawData.detailRows.forEach(d => {
+        // Match qua posCode (Product ID trong POS dạng "S3P2146446156" → match "2146446156")
+        const pid = String(d.productId).replace(/^S\d+P/, '').trim();
+        if (!volumeMap[pid]) volumeMap[pid] = { qty: 0, revenue: 0 };
+        volumeMap[pid].qty += Number(d.quantity) || 0;
+        volumeMap[pid].revenue += Number(d.finalAmount) || 0;
+      });
+    }
+
+    // Build matrix
+    const items = menu.filter(m => m.isActive).map(m => {
+      const vol = volumeMap[m.posCode] || { qty: 0, revenue: 0 };
+      const cost = m.cost ?? (m.price * 0.30); // fallback 30% nếu chưa có cost từ định lượng
+      const margin = m.price - cost;
       const marginPct = (margin / m.price) * 100;
-      // Mock volume based on complexity/price
-      const volume = Math.floor(Math.random() * 200) + 20; 
-      
-      let category = 'Dog';
-      if (volume > 100 && marginPct >= 70) category = 'Star';
-      else if (volume > 100 && marginPct < 70) category = 'Plow Horse';
-      else if (volume <= 100 && marginPct >= 70) category = 'Puzzle';
-
-      return {
-        ...m,
-        margin,
-        marginPct: marginPct.toFixed(1),
-        volume,
-        category
-      };
+      return { ...m, margin, marginPct, volume: vol.qty, revenue: vol.revenue };
     });
-  };
 
-  const menuMatrix = analyzeMenu();
+    // Median-based classification
+    const volumes = items.map(i => i.volume).sort((a, b) => a - b);
+    const margins = items.map(i => i.marginPct).sort((a, b) => a - b);
+    const medVol = volumes[Math.floor(volumes.length / 2)] || 0;
+    const medMargin = margins[Math.floor(margins.length / 2)] || 0;
+
+    return items.map(i => {
+      let category = 'Dog';
+      if (i.volume >= medVol && i.marginPct >= medMargin) category = 'Star';
+      else if (i.volume >= medVol && i.marginPct < medMargin) category = 'Plow Horse';
+      else if (i.volume < medVol && i.marginPct >= medMargin) category = 'Puzzle';
+      return { ...i, category, marginPctFmt: i.marginPct.toFixed(1) };
+    });
+  }, [menu, posRawData]);
+
+  // Derived max/median refs for chart lines
+  const medVol = menuMatrix.length ? menuMatrix.map(i => i.volume).sort((a,b)=>a-b)[Math.floor(menuMatrix.length / 2)] : 100;
+  const medMargin = menuMatrix.length ? menuMatrix.map(i => i.marginPct).sort((a,b)=>a-b)[Math.floor(menuMatrix.length / 2)] : 70;
 
   return (
     <div className="p-6 md:p-8 space-y-6">
+      {!posRawData && (
+        <div className="bg-[var(--color-accent-orange)]/10 border border-[var(--color-accent-orange)]/30 rounded-xl p-4 text-sm text-[var(--color-accent-orange)]">
+          ⚠️ Chưa có dữ liệu POS. Volume và doanh thu hiện đang là 0. Vui lòng upload file POS để xem phân tích đầy đủ.
+        </div>
+      )}
+
       <div className="mb-8">
         <h2 className="text-2xl font-bold text-white tracking-tight">Menu Engineering (Star/Dog)</h2>
         <p className="text-[var(--color-text-muted)] text-sm mt-1">Phân tích hiệu suất món ăn theo Lợi nhuận (Margin) và Lượt Bán (Volume).</p>
@@ -52,12 +76,8 @@ export function MenuAnalysis() {
           <ResponsiveContainer>
             <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-main)" />
-              <XAxis type="number" dataKey="volume" name="Lượt bán" stroke="var(--color-text-muted)" tickLine={false} axisLine={false}>
-                
-              </XAxis>
-              <YAxis type="number" dataKey="marginPct" name="Lợi nhuận (%)" stroke="var(--color-text-muted)" tickLine={false} axisLine={false} domain={[0, 100]}>
-                
-              </YAxis>
+              <XAxis type="number" dataKey="volume" name="Lượt bán" stroke="var(--color-text-muted)" tickLine={false} axisLine={false} />
+              <YAxis type="number" dataKey="marginPct" name="Lợi nhuận (%)" stroke="var(--color-text-muted)" tickLine={false} axisLine={false} domain={[0, 100]} />
               
               <Tooltip 
                 cursor={{ strokeDasharray: '3 3' }} 
@@ -66,19 +86,22 @@ export function MenuAnalysis() {
                   if (active && payload && payload.length) {
                     const data = payload[0].payload;
                     return (
-                      <div className="bg-[var(--color-bg-main)] border border-[var(--color-border-main)] p-3 rounded-lg shadow-xl">
+                      <div className="bg-[var(--color-bg-main)] border border-[var(--color-border-main)] p-3 rounded-lg shadow-xl min-w-[200px]">
                         <p className="font-bold text-white mb-1">{data.displayName}</p>
-                        <p className="text-xs text-[var(--color-text-muted)]">Category: <span style={{color: getCategoryColor(data.category)}}>{data.category}</span></p>
-                        <p className="text-xs text-[var(--color-text-muted)] mt-2">Lớt bán: <span className="font-bold text-white">{data.volume}</span></p>
-                        <p className="text-xs text-[var(--color-text-muted)]">Margin: <span className="font-bold text-[var(--color-accent-green)]">{data.marginPct}%</span> ({formatCurrency(data.margin)})</p>
+                        <p className="text-xs text-[var(--color-text-muted)] mb-2">Mã POS: <span className="font-mono text-[var(--color-accent-gold)]">{data.posCode}</span></p>
+                        <p className="text-xs text-[var(--color-text-muted)]">Category: <span style={{color: getCategoryColor(data.category), fontWeight: 'bold'}}>{data.category}</span></p>
+                        <hr className="my-2 border-[var(--color-border-main)]" />
+                        <p className="text-xs text-[var(--color-text-muted)] mt-2">Lượt bán (Volume): <span className="font-bold text-white">{data.volume}</span></p>
+                        <p className="text-xs text-[var(--color-text-muted)] mt-1">Doanh thu (thực tế POS): <span className="font-bold text-white">{formatCurrency(data.revenue)}</span></p>
+                        <p className="text-xs text-[var(--color-text-muted)] mt-1">Margin Pct: <span className="font-bold text-[var(--color-accent-green)]">{data.marginPctFmt}%</span> ({formatCurrency(data.margin)})</p>
                       </div>
                     );
                   }
                   return null;
                 }}
               />
-              <ReferenceLine x={100} stroke="var(--color-text-muted)" strokeDasharray="3 3" />
-              <ReferenceLine y={70} stroke="var(--color-text-muted)" strokeDasharray="3 3" />
+              <ReferenceLine x={medVol} stroke="var(--color-text-muted)" strokeDasharray="3 3" />
+              <ReferenceLine y={medMargin} stroke="var(--color-text-muted)" strokeDasharray="3 3" />
               <Scatter data={menuMatrix}>
                 {menuMatrix.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={getCategoryColor(entry.category)} />

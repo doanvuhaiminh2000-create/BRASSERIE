@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { User, Table, MenuItem, OrderSession, SessionItem } from '../types';
+import { User, Table, MenuItem, OrderSession, SessionItem, POSRawData } from '../types';
 import { mockUsers, mockMenu, generateMockTables } from '../data/mockData';
 import { DashboardMetrics } from '../lib/posDataParser';
 
@@ -10,6 +10,7 @@ interface AppState {
   tables: Table[];
   sessions: OrderSession[];
   dashboardMetrics: DashboardMetrics | null;
+  posRawData: POSRawData | null;
 }
 
 interface AppContextType extends AppState {
@@ -27,6 +28,9 @@ interface AppContextType extends AppState {
   recordUpsellAttempt: (tableId: number, attempt: { menuItemId: string, result: 'TC' | 'TChối', reason?: string }) => void;
   checkoutSession: (tableId: number, paymentMethod: 'Tiền Mặt' | 'Thẻ NCB' | 'VietQR' | 'Voucher') => void;
   setDashboardMetrics: (metrics: DashboardMetrics) => void;
+  setMenu: (menu: MenuItem[]) => void;
+  toggleMenuItemActive: (id: string) => void;
+  setPosRawData: (data: POSRawData | null) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -36,7 +40,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   
   // Loading state from localStorage
   const [users] = useState<User[]>(mockUsers);
-  const [menu] = useState<MenuItem[]>(mockMenu);
+  
+  const [menu, setMenu] = useState<MenuItem[]>(() => {
+    const saved = localStorage.getItem('brasserie_menu');
+    return saved ? JSON.parse(saved) : mockMenu;
+  });
+
+  const [posRawData, setPosRawData] = useState<POSRawData | null>(() => {
+    const saved = localStorage.getItem('brasserie_pos_raw');
+    return saved ? JSON.parse(saved) : null;
+  });
   
   const [tables, setTables] = useState<Table[]>(() => {
     const saved = localStorage.getItem('brasserie_tables');
@@ -53,7 +66,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return saved ? JSON.parse(saved) : null;
   });
 
-  // Save to localStorage when tables/sessions/metrics change
+  // Save to localStorage when tables/sessions/metrics/menu/posRawData change
   useEffect(() => {
     localStorage.setItem('brasserie_tables', JSON.stringify(tables));
   }, [tables]);
@@ -67,6 +80,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem('brasserie_metrics', JSON.stringify(dashboardMetrics));
     }
   }, [dashboardMetrics]);
+
+  useEffect(() => {
+    localStorage.setItem('brasserie_menu', JSON.stringify(menu));
+  }, [menu]);
+
+  useEffect(() => {
+    if (posRawData) {
+      localStorage.setItem('brasserie_pos_raw', JSON.stringify(posRawData));
+    }
+  }, [posRawData]);
+
+  // Menu Logic
+  const toggleMenuItemActive = (id: string) => {
+    setMenu(prev => prev.map(m => m.id === id ? { ...m, isActive: !m.isActive } : m));
+  };
 
   // Auth
   const login = (userId: string, pin: string) => {
@@ -328,11 +356,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   const value = React.useMemo(() => ({
-    currentUser, users, menu, tables, sessions, dashboardMetrics,
+    currentUser, users, menu, tables, sessions, dashboardMetrics, posRawData,
     login, logout, updateTable, createSession, updateSession, 
     addItem, updatePendingItemQty, removePendingItem, sendRoundToKitchen, serveItem, cancelItem, recordUpsellAttempt, checkoutSession,
-    setDashboardMetrics
-  }), [currentUser, users, menu, tables, sessions, dashboardMetrics]);
+    setDashboardMetrics, setMenu, toggleMenuItemActive, setPosRawData
+  }), [currentUser, users, menu, tables, sessions, dashboardMetrics, posRawData]);
 
   return (
     <AppContext.Provider value={value}>
