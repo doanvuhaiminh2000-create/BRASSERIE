@@ -46,16 +46,16 @@ export function SessionFlow() {
   // Lock management
   React.useEffect(() => {
     if (!table || !currentUser) return;
-    const tid = table.id;
+    
     // Acquire lock
-    updateTable(tid, {
+    updateTable(table.id, {
       lockedBy: currentUser.id,
       lockedAt: Date.now()
     });
 
     return () => {
       // Clear lock on unmount
-      updateTable(tid, {
+      updateTable(table.id, {
         lockedBy: null,
         lockedAt: null
       });

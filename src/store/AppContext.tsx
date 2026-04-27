@@ -48,7 +48,10 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [isTablesLoaded, setIsTablesLoaded] = useState(false);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    const saved = localStorage.getItem('brasserie_user');
+    return saved ? JSON.parse(saved) : null;
+  });
   const [users] = useState<User[]>(mockUsers);
   
   const [tables, setTables] = useState<Table[]>([]);
@@ -74,8 +77,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // Strip S3P prefix if any
         const cleanCode = normalizePosCode(detail.productId);
         const cat = String(detail.category || '');
-        // ONLY count Food items
-        if (!cat.includes('Food') && !cat.startsWith('1.')) continue;
+        // ONLY count items in menu
+        if (!menuPosCodes.has(cleanCode)) continue;
         
         if (!map.has(cleanCode)) {
           map.set(cleanCode, {
@@ -132,12 +135,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const user = users.find(u => u.id === userId && u.pin === pin);
     if (user) {
       setCurrentUser(user);
+      localStorage.setItem('brasserie_user', JSON.stringify(user));
       return true;
     }
     return false;
   };
 
-  const logout = () => setCurrentUser(null);
+  const logout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem('brasserie_user');
+  };
 
   // Table Logic
   const updateTable = (tableId: number, updates: Partial<Table>) => {
@@ -390,6 +397,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const checkoutSession = async (tableId: number, paymentMethod: 'Tiền Mặt' | 'Thẻ NCB' | 'VietQR' | 'Voucher') => {
     const session = getActiveSessionByTable(tableId);
     if (!session) return;
+    
+    const hasUnservedItems = session.items.some(i => i.status === 'PENDING' || i.status === 'SENT');
+    if (hasUnservedItems) {
+      toast.error('Không thể thanh toán: Bàn vẫn còn món chưa phục vụ xong!');
+      return;
+    }
     
     const newLog = {
       id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,

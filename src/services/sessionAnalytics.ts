@@ -67,9 +67,9 @@ export const sessionAnalytics = {
           const itemRev = (item.menuItem.price || 0) * item.quantity;
           totalUpsellRevenue += itemRev;
           
-          // Allocate revenue to staff who opened session (simplified attribution)
-          const sid = s.openedByStaffId;
-          // Ideally link attempt to item, but since attempts don't map to items exactly, use session owner
+          const attempt = s.upsellAttempts?.find(a => a.menuItemId === item.menuItem.posCode && a.result === 'TC');
+          const sid = attempt ? attempt.staffId : s.openedByStaffId;
+          
           if (staffAttemptsMap[sid]) {
              staffAttemptsMap[sid].revenue += itemRev;
           }
@@ -225,6 +225,18 @@ export const sessionAnalytics = {
         }
         staffMap[sid].upsellAttempts++;
         if (u.result === 'TC') staffMap[sid].upsellSuccess++;
+      });
+
+      (s.items || []).forEach(item => {
+        if (item.isUpsold && item.status !== 'CANCELED') {
+          const itemRev = (item.menuItem.price || 0) * item.quantity;
+          const attempt = s.upsellAttempts?.find(a => a.menuItemId === item.menuItem.posCode && a.result === 'TC');
+          const sid = attempt ? attempt.staffId : s.openedByStaffId;
+          if (!staffMap[sid]) {
+            staffMap[sid] = { openedTables: 0, closedBills: 0, revenue: 0, upsellAttempts: 0, upsellSuccess: 0, upsellRevenue: 0, totalServiceTime: 0, serviceCount: 0 };
+          }
+          staffMap[sid].upsellRevenue += itemRev;
+        }
       });
       
       // Serve events
