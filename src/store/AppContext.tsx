@@ -4,6 +4,7 @@ import { User, Table, OrderSession, SessionItem } from '../types';
 import { MenuItemFull, POSBatch } from '../types/store';
 import { mockUsers, generateMockTables } from '../data/mockData';
 import { dataStore, db } from '../services/dataStore';
+import { normalizePosCode } from '../lib/utils';
 
 import { toast } from '../components/ui/Toast';
 
@@ -22,7 +23,7 @@ interface AppContextType extends AppState {
   login: (userId: string, pin: string) => boolean;
   logout: () => void;
   updateTable: (tableId: number, updates: Partial<Table>) => void;
-  createSession: (tableId: number, guestCount: number) => Promise<OrderSession>;
+  createSession: (tableId: number, guestCount: number) => Promise<OrderSession | null>;
   updateSession: (sessionId: string, updates: Partial<OrderSession>) => Promise<void>;
   addItem: (tableId: number, item: MenuItemFull, isUpsold?: boolean) => Promise<void>;
   updatePendingItemQty: (tableId: number, itemId: string, delta: number) => Promise<void>;
@@ -64,7 +65,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     for (const batch of posBatches) {
       for (const detail of batch.details) {
         // Strip S3P prefix if any
-        const cleanCode = String(detail.productId).replace(/^S\d+P/, '').trim();
+        const cleanCode = normalizePosCode(detail.productId);
         const cat = String(detail.category || '');
         // ONLY count Food items
         if (!cat.includes('Food') && !cat.startsWith('1.')) continue;
@@ -124,7 +125,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   // Session Management
-  const createSession = async (tableId: number, guestCount: number) => {
+  const createSession = async (tableId: number, guestCount: number): Promise<OrderSession | null> => {
     try {
       const newSession: OrderSession = {
         id: `session_${Date.now()}`,
@@ -154,6 +155,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error(error);
       toast.error('Có lỗi xảy ra khi tạo session.');
+      return null;
     }
   };
 

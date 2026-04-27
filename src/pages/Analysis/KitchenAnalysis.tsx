@@ -1,6 +1,6 @@
 import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { ChefHat, Flame, Timer, CheckCircle } from 'lucide-react';
+import { ChefHat, Flame, Timer, CheckCircle, AlertTriangle } from 'lucide-react';
 
 const stationData = [
   { station: 'Bếp Pizza (P)', avgTime: 12.5, target: 12, max: 18 },
@@ -12,9 +12,21 @@ const stationData = [
 export function KitchenAnalysis() {
   return (
     <div className="p-6 md:p-8 space-y-6">
-      <div className="mb-8">
+      <div className="mb-4">
         <h2 className="text-2xl font-bold text-white tracking-tight">Hiệu Quả Bếp (Kitchen Performance)</h2>
         <p className="text-[var(--color-text-muted)] text-sm mt-1">Phân tích tốc độ ra món theo từng Station.</p>
+      </div>
+
+      <div className="bg-amber-500/10 border-2 border-amber-500/40 rounded-xl p-4 mb-6 flex items-start gap-3">
+        <AlertTriangle className="w-6 h-6 text-amber-500 shrink-0 mt-0.5" />
+        <div>
+          <h3 className="font-black text-amber-400 uppercase tracking-wider text-sm mb-1">⚠️ Trang đang hiển thị DỮ LIỆU MẪU</h3>
+          <p className="text-amber-200/80 text-sm leading-relaxed">
+            Trang này hiện đang sử dụng dữ liệu demo để minh họa giao diện. 
+            Logic phân tích thực tế từ POS / Live Entry sẽ được kết nối trong bản cập nhật tiếp theo. 
+            Các con số dưới đây <strong>không phản ánh dữ liệu thật</strong> của nhà hàng.
+          </p>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

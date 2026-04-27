@@ -53,11 +53,12 @@ export function TableMap() {
     setSelectingTable(table);
   };
 
-  const confirmGuests = (num: number) => {
+  const confirmGuests = async (num: number) => {
     if (!selectingTable) return;
     
     // Create session immediately
-    const session = createSession(selectingTable.id, num);
+    const session = await createSession(selectingTable.id, num);
+    if (!session) return;
     setSelectingTable(null);
     navigate(`/live-entry/table/${selectingTable.id}`);
   };
@@ -87,7 +88,18 @@ export function TableMap() {
     return 'border-[var(--color-accent-gold)] bg-[var(--color-accent-gold)]/10 text-[var(--color-accent-gold)]'; // Just seated
   };
 
-  const zones = ['Trong Nhà', 'Ngoài Trời', 'Cửa Sổ', 'Góc VIP'];
+  const zones = React.useMemo(() => {
+    const zoneOrder = ['Trong Nhà', 'Ngoài Trời', 'Cửa Sổ', 'Góc VIP'];
+    const present = Array.from(new Set(tables.map(t => t.zone)));
+    return present.sort((a, b) => {
+      const ia = zoneOrder.indexOf(a);
+      const ib = zoneOrder.indexOf(b);
+      if (ia === -1 && ib === -1) return a.localeCompare(b);
+      if (ia === -1) return 1;
+      if (ib === -1) return -1;
+      return ia - ib;
+    });
+  }, [tables]);
 
   return (
     <div className="p-6 h-full flex flex-col relative">

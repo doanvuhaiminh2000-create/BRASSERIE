@@ -80,3 +80,13 @@ export function isDateInRange(timestamp: number, range: DateRange, customStart?:
   }
   return true;
 }
+
+/**
+ * Strip POS code prefix như "S3P", "S1P", "S2P", v.v.
+ * VD: "S3P2146446156" → "2146446156"
+ */
+export function normalizePosCode(raw: string | number | null | undefined): string {
+  if (raw === null || raw === undefined) return '';
+  const s = String(raw).trim();
+  return s.replace(/^S\d+P/i, '');
+}

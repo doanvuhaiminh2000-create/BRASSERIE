@@ -50,7 +50,7 @@ export const parseMenuMapping = async (file: File): Promise<{ items: MenuItemFul
         const workbook = XLSX.read(e.target?.result, { type: 'array' });
         const sheetName = workbook.SheetNames.find(s => s.toLowerCase().includes('mapping')) || workbook.SheetNames[0];
         // Use sheet_to_json with header: 1 to get Array of Arrays
-        const rows: any[][] = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: '' });
+        const rows: any[][] = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: '', raw: true });
         
         const items: MenuItemFull[] = [];
         const errors: string[] = [];
@@ -75,7 +75,17 @@ export const parseMenuMapping = async (file: File): Promise<{ items: MenuItemFul
           if (isNaN(price)) price = 0;
 
           // Strip POS code S3P / numeric parsing issues
-          let posCode = sanitizeStr(posCodeRaw).split('.')[0].trim(); 
+          let posCode: string;
+          if (typeof posCodeRaw === 'number') {
+            posCode = Math.round(posCodeRaw).toString();
+          } else {
+            const raw = sanitizeStr(posCodeRaw);
+            if (/^-?\d+(\.\d+)?e[+-]?\d+$/i.test(raw)) {
+              posCode = Math.round(Number(raw)).toString();
+            } else {
+              posCode = raw.split('.')[0].trim();
+            }
+          }
 
           if (!displayNameEN || !posCode) {
              errors.push(`Row ${i + 1}: Thiếu Tên món hoặc POS Code`);
@@ -88,7 +98,7 @@ export const parseMenuMapping = async (file: File): Promise<{ items: MenuItemFul
             displayNameEN,
             displayName,
             section,
-            category: category as any, // casting for simplicity,
+            category: category,
             price,
             isActive: true,
             station: 'N', // default

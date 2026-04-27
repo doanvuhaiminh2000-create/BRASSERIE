@@ -1,6 +1,11 @@
 import { POSBatch, POSSummaryRow } from '../types/store';
 import { OrderSession } from '../types';
 
+function localDateKey(ms: number): string {
+  const d = new Date(ms);
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
 export function getValidBills(batches: POSBatch[], startMs: number, endMs: number): { summary: POSSummaryRow; details: any[] }[] {
   const bills: { summary: POSSummaryRow; details: any[] }[] = [];
   for (const batch of batches) {
@@ -183,7 +188,7 @@ export function buildOccupancyHeatmap(batches: POSBatch[], startMs: number, endM
   const datesInRange = new Set<string>();
 
   for (const bill of bills) {
-    const dateStr = new Date(bill.summary.timeStart).toLocaleDateString('en-US');
+    const dateStr = localDateKey(bill.summary.timeStart);
     datesInRange.add(dateStr);
   }
 
@@ -204,7 +209,7 @@ export function buildOccupancyHeatmap(batches: POSBatch[], startMs: number, endM
     
     for (let q = startQuarter; q <= endQuarter; q++) {
        const qtDate = new Date(q * 15 * 60000);
-       const key = qtDate.toLocaleDateString('en-US') + '-' + qtDate.getHours() * 4 + Math.floor(qtDate.getMinutes() / 15);
+       const key = localDateKey(qtDate.getTime()) + '-' + (qtDate.getHours() * 4 + Math.floor(qtDate.getMinutes() / 15));
        occupancyByDateQuarter.set(key, (occupancyByDateQuarter.get(key) || 0) + 1);
     }
   }
@@ -269,10 +274,9 @@ export function computeIdleGaps(batches: POSBatch[], startMs: number, endMs: num
   const byDateTable = new Map<string, { start: number; end: number }[]>();
   
   for (const bill of bills) {
-    const s = new Date(bill.summary.timeStart);
-    const dateStr = `${s.getFullYear()}-${s.getMonth()}-${s.getDate()}`;
+    const dateStr = localDateKey(bill.summary.timeStart);
     const tableStr = bill.summary.table;
-    const key = `${dateStr}-${tableStr}`;
+    const key = `${dateStr}|${tableStr}`;
     
     if (!byDateTable.has(key)) {
       byDateTable.set(key, []);
@@ -284,7 +288,7 @@ export function computeIdleGaps(batches: POSBatch[], startMs: number, endMs: num
   const tableGaps: Record<string, number[]> = {};
 
   for (const [key, intervals] of byDateTable.entries()) {
-    const table = key.split('-')[3];
+    const table = key.split('|')[1];
     intervals.sort((a, b) => a.start - b.start);
     
     for (let i = 1; i < intervals.length; i++) {

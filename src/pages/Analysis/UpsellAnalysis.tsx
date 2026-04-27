@@ -3,7 +3,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, 
   PieChart, Pie, Cell 
 } from 'recharts';
-import { Target, TrendingUp, DollarSign, Award } from 'lucide-react';
+import { Target, TrendingUp, DollarSign, Award, AlertTriangle } from 'lucide-react';
 import { formatCurrency } from '../../lib/utils';
 
 // --- Synthetic Data cho Báo cáo (Do dữ liệu thực tế live-entry có thể chưa đủ volume) ---
@@ -45,7 +45,7 @@ export function UpsellAnalysis() {
   return (
     <div className="p-6 md:p-8 space-y-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
         <div>
           <h2 className="text-2xl font-bold text-white tracking-tight">Hành Vi Order & Upsell</h2>
           <p className="text-[var(--color-text-muted)] text-sm mt-1">Phân tích hiệu quả tư vấn món và chuyển đổi doanh thu 30 ngày qua.</p>
@@ -57,6 +57,18 @@ export function UpsellAnalysis() {
           <button className="px-4 py-2 bg-[var(--color-accent-gold)] text-black font-semibold rounded-lg text-sm transition-colors shadow-[0_0_15px_rgba(212,162,78,0.2)]">
             Xuất Báo Cáo
           </button>
+        </div>
+      </div>
+
+      <div className="bg-amber-500/10 border-2 border-amber-500/40 rounded-xl p-4 mb-6 flex items-start gap-3">
+        <AlertTriangle className="w-6 h-6 text-amber-500 shrink-0 mt-0.5" />
+        <div>
+          <h3 className="font-black text-amber-400 uppercase tracking-wider text-sm mb-1">⚠️ Trang đang hiển thị DỮ LIỆU MẪU</h3>
+          <p className="text-amber-200/80 text-sm leading-relaxed">
+            Trang này hiện đang sử dụng dữ liệu demo để minh họa giao diện. 
+            Logic phân tích thực tế từ POS / Live Entry sẽ được kết nối trong bản cập nhật tiếp theo. 
+            Các con số dưới đây <strong>không phản ánh dữ liệu thật</strong> của nhà hàng.
+          </p>
         </div>
       </div>
 

@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
 import { POSBatch, POSSummaryRow, POSDetailRow, POSPaymentRow } from '../types/store';
+import { normalizePosCode } from './utils';
 
 // Helper: robust parsing for excel dates or string numbers
 const parseExcelNumeric = (val: any): number => {
@@ -114,10 +115,7 @@ export const parseExcelPOSBatch = async (file: File, batchId: string, uploaderId
 
           // productID has format S3P{posCode} occasionally
           const productId = String(getVal(row, ['Product ID']) || '').trim();
-          let posCode = productId;
-          if (productId.startsWith('S3P') || productId.startsWith('s3p')) {
-            posCode = productId.substring(3);
-          }
+          const posCode = normalizePosCode(productId);
 
           detailRows.push({
             transaction: Number(trxRaw),

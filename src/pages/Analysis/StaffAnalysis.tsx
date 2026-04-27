@@ -1,5 +1,5 @@
 import React from 'react';
-import { Award, Zap, DollarSign, TrendingUp } from 'lucide-react';
+import { Award, Zap, DollarSign, TrendingUp, AlertTriangle } from 'lucide-react';
 import { formatCurrency } from '../../lib/utils';
 import { useApp } from '../../store/AppContext';
 
@@ -7,19 +7,34 @@ export function StaffAnalysis() {
   const { users } = useApp();
 
   // Mocking performance metrics
-  const staffPerformance = users.filter(u => u.role === 'staff').map(u => ({
-    ...u,
-    upsellRevenue: Math.floor(Math.random() * 5000000) + 1000000,
-    upsellRate: Math.floor(Math.random() * 30) + 10,
-    avgSpeed: parseFloat((Math.random() * 10 + 15).toFixed(1)), // mins
-    bills: Math.floor(Math.random() * 200) + 50,
-  })).sort((a, b) => b.upsellRevenue - a.upsellRevenue);
+  const staffPerformance = users.filter(u => u.role === 'staff').map(u => {
+    const seed = u.id.charCodeAt(0) + u.id.charCodeAt(u.id.length - 1);
+    return {
+      ...u,
+      upsellRevenue: 1000000 + (seed * 100000) % 4000000,
+      upsellRate: 10 + (seed % 30),
+      avgSpeed: parseFloat((15 + (seed % 10)).toFixed(1)), // mins
+      bills: 50 + (seed * 3) % 200,
+    };
+  }).sort((a, b) => b.upsellRevenue - a.upsellRevenue);
 
   return (
     <div className="p-6 md:p-8 space-y-6">
-      <div className="mb-8">
+      <div className="mb-4">
         <h2 className="text-2xl font-bold text-white tracking-tight">Hiệu Suất Nhân Viên (Staff Leaderboard)</h2>
         <p className="text-[var(--color-text-muted)] text-sm mt-1">Đánh giá nhân viên dựa trên doanh thu upsell và tốc độ vận hành.</p>
+      </div>
+
+      <div className="bg-amber-500/10 border-2 border-amber-500/40 rounded-xl p-4 mb-6 flex items-start gap-3">
+        <AlertTriangle className="w-6 h-6 text-amber-500 shrink-0 mt-0.5" />
+        <div>
+          <h3 className="font-black text-amber-400 uppercase tracking-wider text-sm mb-1">⚠️ Trang đang hiển thị DỮ LIỆU MẪU</h3>
+          <p className="text-amber-200/80 text-sm leading-relaxed">
+            Trang này hiện đang sử dụng dữ liệu demo để minh họa giao diện. 
+            Logic phân tích thực tế từ POS / Live Entry sẽ được kết nối trong bản cập nhật tiếp theo. 
+            Các con số dưới đây <strong>không phản ánh dữ liệu thật</strong> của nhà hàng.
+          </p>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">

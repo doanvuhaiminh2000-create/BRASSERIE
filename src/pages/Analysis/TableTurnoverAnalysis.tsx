@@ -90,12 +90,21 @@ export function TableTurnoverAnalysis() {
         const tObj = Number(bill.summary.table);
         tablesSeen.add(tObj);
         
-        const d = new Date(bill.summary.timeStart);
-        const h = d.getHours();
-        if (h >= 11 && h < 14) {
+        const billStart = bill.summary.timeStart;
+        const billEnd = bill.summary.timeEnd;
+        const billDate = new Date(billStart);
+        
+        const peakStart = new Date(billDate.getFullYear(), billDate.getMonth(), billDate.getDate(), 11, 0, 0).getTime();
+        const peakEnd = new Date(billDate.getFullYear(), billDate.getMonth(), billDate.getDate(), 14, 0, 0).getTime();
+        
+        // Count as peak bill if it overlaps with peak at all
+        const overlapStart = Math.max(billStart, peakStart);
+        const overlapEnd = Math.min(billEnd, peakEnd);
+        
+        if (overlapEnd > overlapStart) {
            peakBills++;
-           const dur = Math.min((bill.summary.timeEnd - bill.summary.timeStart) / 60000, 240);
-           occupiedTableMinsPeak += dur;
+           const overlapMin = Math.min((overlapEnd - overlapStart) / 60000, 180);
+           occupiedTableMinsPeak += overlapMin;
         }
      }
 
