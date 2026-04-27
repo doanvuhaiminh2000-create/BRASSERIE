@@ -136,161 +136,118 @@ export function SessionFlow() {
            <button onClick={() => { if (paymentMethod) { checkoutSession(table.id, paymentMethod); navigate('/live-entry'); } }} disabled={!paymentMethod} className="w-full max-w-xs py-4 rounded-2xl font-black bg-[var(--color-accent-green)] text-black uppercase tracking-widest disabled:opacity-30">Hoàn Tất</button>
         </div>
       ) : (
-        <div className="flex-1 flex flex-col min-h-0">
-          {/* 2. MENU */}
-          <div className="flex-[2] min-h-[160px] overflow-x-auto overflow-y-hidden p-3 bg-[var(--color-bg-main)]/30 custom-scrollbar border-b border-[var(--color-border-main)] overscroll-x-contain">
-            <div className="flex gap-3 h-full pb-2">
-              {filteredMenu.map(item => (
-                <div key={item.id} onClick={() => handleMenuClick(item)} className={cn("bg-[var(--color-bg-surface)] border p-3 rounded-2xl cursor-pointer active:scale-95 transition-all shadow-md w-[40vw] max-w-[160px] shrink-0 flex flex-col justify-between", hubStage === 'UPSELL' ? "border-[var(--color-accent-green)]/50" : "border-[var(--color-border-main)]")}>
-                  <h4 className="font-bold text-sm text-white line-clamp-3 mb-1 leading-tight">{item.displayName}</h4>
-                  <div>
-                     <p className="text-[var(--color-accent-gold)] font-mono text-xs font-bold">{new Intl.NumberFormat('vi-VN').format(item.price)}đ</p>
-                     {hubStage === 'UPSELL' && <div className="mt-2 py-1 bg-[var(--color-accent-green)]/20 text-[var(--color-accent-green)] text-[9px] font-black uppercase text-center rounded-lg">Bấm để Gợi ý</div>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+        <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden">
+          {/* DESKTOP ONLY: Vertical section sidebar */}
+          <aside className="hidden xl:flex flex-col w-44 border-r border-[var(--color-border-main)] bg-[var(--color-bg-surface)]/50 overflow-y-auto custom-scrollbar shrink-0">
+            <h3 className="text-[10px] uppercase tracking-widest text-[var(--color-text-muted)] font-black p-4 border-b border-[var(--color-border-main)]">Danh mục</h3>
+            {sections.map(sec => (
+              <button 
+                key={sec}
+                onClick={() => setSelectedSection(sec)}
+                className={cn(
+                  "px-4 py-3 text-left text-[11px] font-bold border-l-2 transition-all uppercase tracking-tight",
+                  selectedSection === sec 
+                    ? "bg-[var(--color-accent-gold)]/10 border-[var(--color-accent-gold)] text-[var(--color-accent-gold)]"
+                    : "border-transparent text-[var(--color-text-muted)] hover:text-white hover:bg-white/5"
+                )}
+              >
+                {sec}
+              </button>
+            ))}
+          </aside>
 
-          {/* 3. ORDER LIST */}
-          <div className="flex-[3] min-h-[0px] overflow-y-auto p-3 bg-[var(--color-bg-surface)] custom-scrollbar">
-            {pendingItems.length === 0 && sentItems.length === 0 && servedItems.length === 0 && (
-               <div className="h-full flex items-center justify-center text-[var(--color-text-muted)] text-[10px] uppercase font-bold tracking-widest">
-                 Chưa có món nào được chọn.
-               </div>
-            )}
-            
-            <div className="space-y-4 pb-4">
-
-              {/* PENDING ITEMS */}
-              {pendingItems.length > 0 && (
-                <div className="space-y-2">
-                  <h4 className="text-[10px] font-black text-white uppercase tracking-widest border-l-2 border-[var(--color-accent-gold)] pl-2">🛒 Món đang chọn</h4>
-                  {pendingItems.map(item => (
-                    <div key={item.id} className="bg-[var(--color-bg-main)] p-3 rounded-xl border border-[var(--color-border-main)] relative overflow-hidden flex flex-col md:flex-row gap-2 justify-between">
-                      {item.isUpsold && <div className="absolute top-0 right-0 bg-[var(--color-accent-green)] text-black text-[8px] font-black px-2 py-0.5 rounded-bl-lg">UPSELL TC</div>}
-                      <div className="flex-1 pr-6">
-                        <span className="font-bold text-white text-sm block leading-tight">{item.menuItem.displayName}</span>
-                        <span className="hidden md:block text-[10px] text-[var(--color-text-muted)] mt-0.5">{new Intl.NumberFormat('vi-VN').format(item.menuItem.price)}đ</span>
-                      </div>
-                      <div className="flex items-center gap-3 justify-between md:justify-end shrink-0">
-                        <div className="flex items-center gap-1 bg-[var(--color-bg-surface)] rounded-lg p-1 border border-[var(--color-border-main)]">
-                          <button onClick={() => updatePendingItemQty(table.id, item.id, -1)} className="w-8 h-8 flex items-center justify-center text-white text-lg font-black bg-[var(--color-bg-main)] rounded active:scale-90">-</button>
-                          <span className="w-6 text-center font-bold text-sm text-white">{item.quantity}</span>
-                          <button onClick={() => updatePendingItemQty(table.id, item.id, 1)} className="w-8 h-8 flex items-center justify-center text-black text-lg font-black bg-[var(--color-accent-gold)] rounded active:scale-90">+</button>
-                        </div>
-                        <button onClick={() => removePendingItem(table.id, item.id)} className="p-2 text-[var(--color-text-muted)] hover:text-red-500 rounded bg-red-500/10 active:scale-90">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+          <div className="flex-1 flex flex-col min-h-0">
+            {/* 2. MENU */}
+            <div className={cn(
+              "p-3 bg-[var(--color-bg-main)]/30 custom-scrollbar border-b border-[var(--color-border-main)] overscroll-x-contain",
+              "flex-[2] min-h-[160px] md:flex-1 md:overflow-y-auto overflow-x-auto"
+            )}>
+              <div className={cn(
+                "flex gap-3 h-full pb-2", // Mobile/Tablet side scroll
+                "md:grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 md:h-auto md:pb-0" // PC Grid
+              )}>
+                {filteredMenu.map(item => (
+                  <div key={item.posCode} onClick={() => handleMenuClick(item)} className={cn("bg-[var(--color-bg-surface)] border p-3 rounded-2xl cursor-pointer active:scale-95 transition-all shadow-md w-[40vw] max-w-[160px] md:w-auto md:max-w-none shrink-0 flex flex-col justify-between", hubStage === 'UPSELL' ? "border-[var(--color-accent-green)]/50" : "border-[var(--color-border-main)]")}>
+                    <h4 className="font-bold text-sm text-white line-clamp-3 mb-1 leading-tight">{item.displayName}</h4>
+                    <div>
+                       <p className="text-[var(--color-accent-gold)] font-mono text-xs font-bold">{new Intl.NumberFormat('vi-VN').format(item.price)}đ</p>
+                       {hubStage === 'UPSELL' && <div className="mt-2 py-1 bg-[var(--color-accent-green)]/20 text-[var(--color-accent-green)] text-[9px] font-black uppercase text-center rounded-lg">Bấm để Gợi ý</div>}
                     </div>
-                  ))}
-                </div>
-              )}
-
-              {/* SENT ITEMS */}
-              {sentItems.length > 0 && (
-                <div className="space-y-2">
-                  <h4 className="text-[10px] font-black text-[var(--color-accent-orange)] uppercase tracking-widest border-l-2 border-[var(--color-accent-orange)] pl-2 flex items-center gap-1">
-                     <span className="animate-pulse">🍳</span> Đang Chế Biến
-                  </h4>
-                  {sentItems.map(item => {
-                    const minutesElapsed = item.sentAt ? Math.floor((Date.now() - item.sentAt) / 60000) : 0;
-                    return (
-                      <div key={item.id} className="bg-[#1a1510] p-3 rounded-xl border border-[var(--color-accent-orange)]/30 relative flex justify-between items-center gap-2">
-                         <div className="flex-1">
-                            <span className="font-bold text-white text-sm block leading-tight">{item.quantity}x {item.menuItem.displayName}</span>
-                            <div className="flex items-center gap-2 mt-1">
-                               <span className={cn("text-[9px] font-black px-1.5 py-0.5 rounded flex items-center gap-1", minutesElapsed > 15 ? "bg-red-500/20 text-red-500 animate-pulse" : "bg-white/5 text-[var(--color-text-muted)]")}>
-                                 <Clock className="w-2.5 h-2.5" /> Chờ {minutesElapsed}p
-                               </span>
-                            </div>
-                         </div>
-                         <button onClick={() => serveItem(table.id, item.id)} className="bg-[var(--color-accent-green)] text-black font-black px-4 py-3 rounded-lg shadow-md active:scale-95 transition-all text-xs uppercase shrink-0">
-                           RA MÓN
-                         </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* SERVED ITEMS */}
-              {servedItems.length > 0 && (
-                <details className="group pt-2">
-                  <summary className="text-[10px] font-black text-[var(--color-text-muted)] uppercase cursor-pointer mb-2 list-none flex items-center justify-between border border-[var(--color-border-main)] p-2 rounded-lg bg-[var(--color-bg-main)]">
-                     <div className="flex items-center gap-2">
-                        <CheckCircle2 className="w-3 h-3 text-[var(--color-accent-green)]" />
-                        <span>Món Đã Lên ({servedItems.length})</span>
-                     </div>
-                     <span className="transition-transform group-open:rotate-90">▶</span>
-                  </summary>
-                  <div className="space-y-1 pl-1">
-                    {servedItems.map(item => (
-                      <div key={item.id} className="flex flex-wrap items-center justify-between py-1 border-b border-white/5 gap-2">
-                         <span className="text-xs text-white/50 font-medium"><b>{item.quantity}x</b> {item.menuItem.displayName}</span>
-                      </div>
-                    ))}
                   </div>
-                </details>
-              )}
+                ))}
+              </div>
+            </div>
 
-              {/* LIVE FEED (LỊCH SỬ BÀN) */}
-              {activeSession && activeSession.eventLogs.length > 0 && (
-                <details className="group pt-2">
-                  <summary className="text-[10px] font-black text-[var(--color-text-muted)] uppercase cursor-pointer mb-2 list-none flex items-center justify-between border border-[var(--color-border-main)] p-2 rounded-lg bg-[var(--color-bg-main)] hover:border-[var(--color-accent-blue)] transition-colors">
-                     <div className="flex items-center gap-2">
-                        <Clock className="w-3 h-3 text-[var(--color-accent-blue)]" />
-                        <span>Lịch Sử Bàn ({activeSession.eventLogs.length} sự kiện)</span>
-                     </div>
-                     <span className="transition-transform group-open:rotate-90">▶</span>
-                  </summary>
-                  <div className="space-y-3 pl-3 border-l-2 border-[var(--color-border-main)] ml-1 mt-3 mb-2">
-                    {activeSession.eventLogs.slice().reverse().map(log => {
-                      const d = new Date(log.time);
-                      const hhmm = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
-                      return (
-                        <div key={log.id} className="relative before:absolute before:-left-[15px] before:top-1.5 before:w-2 before:h-2 before:bg-[var(--color-accent-blue)] before:rounded-full before:shadow-[0_0_5px_var(--color-accent-blue)]">
-                           <div className="flex items-center gap-2 mb-0.5">
-                             <span className="text-[10px] text-[var(--color-accent-blue)] font-bold">{hhmm}</span>
-                             <span className="text-[10px] font-bold text-white bg-white/10 px-1.5 py-0.5 rounded">{log.staffName}</span>
-                           </div>
-                           <p className="text-xs text-[var(--color-text-muted)] leading-tight">{log.details}</p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </details>
+            {/* 3. ORDER LIST (Mobile view - merged into sidebar on PC/Tablet?) */}
+            <div className="md:hidden flex-[3] min-h-[0px] overflow-y-auto p-3 bg-[var(--color-bg-surface)] custom-scrollbar">
+              {pendingItems.length === 0 && sentItems.length === 0 && servedItems.length === 0 && (
+                 <div className="h-full flex items-center justify-center text-[var(--color-text-muted)] text-[10px] uppercase font-bold tracking-widest">
+                   Chưa có món nào được chọn.
+                 </div>
               )}
+              
+              <div className="space-y-4 pb-4">
+                <OrderContent 
+                  pendingItems={pendingItems}
+                  sentItems={sentItems}
+                  servedItems={servedItems}
+                  tableId={table.id}
+                  updateQty={updatePendingItemQty}
+                  removePending={removePendingItem}
+                  serveItem={serveItem}
+                  activeSession={activeSession}
+                />
+              </div>
+            </div>
+
+            {/* 4. ACTIONS (Mobile footer) */}
+            <div className="md:hidden flex-none border-t border-[var(--color-border-main)] bg-[var(--color-bg-surface)] p-3 shrink-0 flex flex-col justify-end pb-safe">
+               <OrderActions 
+                 pendingItems={pendingItems}
+                 hubStage={hubStage}
+                 setHubStage={setHubStage}
+                 grandTotal={grandTotal}
+                 setIsCheckoutMode={setIsCheckoutMode}
+                 sentItems={sentItems}
+                 handleSendToKitchen={handleSendToKitchen}
+               />
             </div>
           </div>
 
-          {/* 4. ACTIONS */}
-          <div className="flex-none border-t border-[var(--color-border-main)] bg-[var(--color-bg-surface)] p-3 shrink-0 flex flex-col justify-end pb-safe">
-             <div className="flex justify-between items-center mb-3 px-1">
-                <span className="text-[var(--color-text-muted)] font-black uppercase text-[10px]">TỔNG: <span className="text-[var(--color-accent-gold)] text-sm">{new Intl.NumberFormat('vi-VN').format(calculateTotal(pendingItems))}đ</span></span>
+          {/* TABLET/PC SIDEBAR: ORDER PANEL */}
+          <aside className="hidden md:flex flex-col w-[320px] lg:w-[380px] bg-[var(--color-bg-surface)] border-l border-[var(--color-border-main)] shrink-0 overflow-hidden">
+             <div className="p-4 border-b border-[var(--color-border-main)] bg-[var(--color-bg-main)] flex justify-between items-center">
+                <h3 className="text-xs font-black text-white uppercase tracking-widest">Chi tiết Order</h3>
+                <span className="text-[10px] text-[var(--color-text-muted)] font-mono">Bàn {table.name}</span>
              </div>
              
-             <div className="flex gap-2 w-full">
-               {hubStage === 'ORDER' && <button onClick={() => setHubStage('UPSELL')} disabled={pendingItems.length === 0} className="flex-1 py-4 bg-[var(--color-accent-gold)] text-black font-black rounded-xl uppercase text-xs disabled:opacity-50 tracking-widest shadow-lg">XONG ORDER → ƯU TIÊN UPSELL</button>}
-               
-               {hubStage === 'UPSELL' && <>
-                 <button onClick={() => setHubStage('ORDER')} className="px-5 bg-[var(--color-bg-main)] border border-[var(--color-border-main)] text-white font-bold rounded-xl text-[11px] uppercase">Lùi lại</button>
-                 <button onClick={() => setHubStage('REVIEW')} className="flex-1 py-4 bg-[var(--color-accent-green)] text-black font-black rounded-xl uppercase text-xs tracking-widest shadow-lg">ĐÃ UPSELL → XONG</button>
-               </>}
-               
-               {hubStage === 'REVIEW' && <>
-                 <button onClick={() => setHubStage('UPSELL')} className="px-5 bg-[var(--color-bg-main)] border border-[var(--color-border-main)] text-white font-bold rounded-xl text-[11px] uppercase">Lùi lại</button>
-                 <button onClick={handleSendToKitchen} className="flex-1 py-4 bg-[var(--color-accent-orange)] text-white font-black rounded-xl animate-pulse uppercase text-xs tracking-widest shadow-lg">🚀 XÁC NHẬN GỬI BẾP</button>
-               </>}
-               
-               {/* THANH TOÁN (Trạng thái trung lập, không có pending item) */}
-               {pendingItems.length === 0 && hubStage === 'ORDER' && grandTotal > 0 && (
-                  <button onClick={() => setIsCheckoutMode(true)} disabled={sentItems.length > 0} className="flex-1 py-4 border-2 border-white/20 text-white font-black rounded-xl uppercase text-[11px] tracking-widest hover:border-[var(--color-accent-green)] transition-all">💸 THANH TOÁN CẢ BÀN</button>
-               )}
+             <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-4">
+                <OrderContent 
+                  pendingItems={pendingItems}
+                  sentItems={sentItems}
+                  servedItems={servedItems}
+                  tableId={table.id}
+                  updateQty={updatePendingItemQty}
+                  removePending={removePendingItem}
+                  serveItem={serveItem}
+                  activeSession={activeSession}
+                />
              </div>
-          </div>
+
+             <div className="p-4 border-t border-[var(--color-border-main)] space-y-4">
+                <OrderActions 
+                  pendingItems={pendingItems}
+                  hubStage={hubStage}
+                  setHubStage={setHubStage}
+                  grandTotal={grandTotal}
+                  setIsCheckoutMode={setIsCheckoutMode}
+                  sentItems={sentItems}
+                  handleSendToKitchen={handleSendToKitchen}
+                />
+             </div>
+          </aside>
         </div>
+
       )}
 
       {/* UPSLL DECISION MODAL */}
@@ -311,6 +268,142 @@ export function SessionFlow() {
            </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function OrderContent({ pendingItems, sentItems, servedItems, tableId, updateQty, removePending, serveItem, activeSession }: any) {
+  return (
+    <div className="space-y-4">
+      {/* PENDING ITEMS */}
+      {pendingItems.length > 0 && (
+        <div className="space-y-2">
+          <h4 className="text-[10px] font-black text-white uppercase tracking-widest border-l-2 border-[var(--color-accent-gold)] pl-2">🛒 Món đang chọn</h4>
+          {pendingItems.map((item: any) => (
+            <div key={item.id} className="bg-[var(--color-bg-main)] p-3 rounded-xl border border-[var(--color-border-main)] relative overflow-hidden flex flex-col gap-2 justify-between">
+              {item.isUpsold && <div className="absolute top-0 right-0 bg-[var(--color-accent-green)] text-black text-[8px] font-black px-2 py-0.5 rounded-bl-lg">UPSELL TC</div>}
+              <div className="flex-1 pr-6">
+                <span className="font-bold text-white text-sm block leading-tight">{item.menuItem.displayName}</span>
+                <span className="text-[10px] text-[var(--color-text-muted)] mt-0.5">{new Intl.NumberFormat('vi-VN').format(item.menuItem.price)}đ</span>
+              </div>
+              <div className="flex items-center gap-3 justify-between shrink-0">
+                <div className="flex items-center gap-1 bg-[var(--color-bg-surface)] rounded-lg p-1 border border-[var(--color-border-main)]">
+                  <button onClick={() => updateQty(tableId, item.id, -1)} className="w-8 h-8 flex items-center justify-center text-white text-lg font-black bg-[var(--color-bg-main)] rounded active:scale-90">-</button>
+                  <span className="w-6 text-center font-bold text-sm text-white">{item.quantity}</span>
+                  <button onClick={() => updateQty(tableId, item.id, 1)} className="w-8 h-8 flex items-center justify-center text-black text-lg font-black bg-[var(--color-accent-gold)] rounded active:scale-90">+</button>
+                </div>
+                <button onClick={() => removePending(tableId, item.id)} className="p-2 text-[var(--color-text-muted)] hover:text-red-500 rounded bg-red-500/10 active:scale-90">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* SENT ITEMS */}
+      {sentItems.length > 0 && (
+        <div className="space-y-2">
+          <h4 className="text-[10px] font-black text-[var(--color-accent-orange)] uppercase tracking-widest border-l-2 border-[var(--color-accent-orange)] pl-2 flex items-center gap-1">
+             <span className="animate-pulse">🍳</span> Đang Chế Biến
+          </h4>
+          {sentItems.map((item: any) => {
+            const minutesElapsed = item.sentAt ? Math.floor((Date.now() - item.sentAt) / 60000) : 0;
+            return (
+              <div key={item.id} className="bg-[#1a1510] p-3 rounded-xl border border-[var(--color-accent-orange)]/30 relative flex justify-between items-center gap-2">
+                 <div className="flex-1">
+                    <span className="font-bold text-white text-sm block leading-tight">{item.quantity}x {item.menuItem.displayName}</span>
+                    <div className="flex items-center gap-2 mt-1">
+                       <span className={cn("text-[9px] font-black px-1.5 py-0.5 rounded flex items-center gap-1", minutesElapsed > 15 ? "bg-red-500/20 text-red-500 animate-pulse" : "bg-white/5 text-[var(--color-text-muted)]")}>
+                         <Clock className="w-2.5 h-2.5" /> Chờ {minutesElapsed}p
+                       </span>
+                    </div>
+                 </div>
+                 <button onClick={() => serveItem(tableId, item.id)} className="bg-[var(--color-accent-green)] text-black font-black px-4 py-3 rounded-lg shadow-md active:scale-95 transition-all text-sm uppercase shrink-0">
+                   RA
+                 </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* SERVED ITEMS */}
+      {servedItems.length > 0 && (
+        <details className="group pt-2">
+          <summary className="text-[10px] font-black text-[var(--color-text-muted)] uppercase cursor-pointer mb-2 list-none flex items-center justify-between border border-[var(--color-border-main)] p-2 rounded-lg bg-[var(--color-bg-main)]">
+             <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-3 h-3 text-[var(--color-accent-green)]" />
+                <span>Món Đã Lên ({servedItems.length})</span>
+             </div>
+             <span className="transition-transform group-open:rotate-90">▶</span>
+          </summary>
+          <div className="space-y-1 pl-1">
+            {servedItems.map((item: any) => (
+              <div key={item.id} className="flex flex-wrap items-center justify-between py-1 border-b border-white/5 gap-2">
+                 <span className="text-xs text-white/50 font-medium"><b>{item.quantity}x</b> {item.menuItem.displayName}</span>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+
+      {/* EVENT LOGS */}
+      {activeSession && activeSession.eventLogs.length > 0 && (
+        <details className="group pt-2">
+          <summary className="text-[10px] font-black text-[var(--color-text-muted)] uppercase cursor-pointer mb-2 list-none flex items-center justify-between border border-[var(--color-border-main)] p-2 rounded-lg bg-[var(--color-bg-main)]">
+             <div className="flex items-center gap-2">
+                <Clock className="w-3 h-3 text-[var(--color-accent-blue)]" />
+                <span>Lịch Sử ({activeSession.eventLogs.length})</span>
+             </div>
+             <span className="transition-transform group-open:rotate-90">▶</span>
+          </summary>
+          <div className="space-y-3 pl-3 border-l-2 border-[var(--color-border-main)] ml-1 mt-3 mb-2">
+            {activeSession.eventLogs.slice().reverse().map((log: any) => {
+              const d = new Date(log.time);
+              const hhmm = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+              return (
+                <div key={log.id} className="relative before:absolute before:-left-[15px] before:top-1.5 before:w-2 before:h-2 before:bg-[var(--color-accent-blue)] before:rounded-full">
+                   <div className="flex items-center gap-2 mb-0.5">
+                     <span className="text-[10px] text-[var(--color-accent-blue)] font-bold">{hhmm}</span>
+                     <span className="text-[9px] font-bold text-white bg-white/10 px-1 py-0.5 rounded uppercase">{log.staffName}</span>
+                   </div>
+                   <p className="text-[11px] text-[var(--color-text-muted)] leading-tight">{log.details}</p>
+                </div>
+              );
+            })}
+          </div>
+        </details>
+      )}
+    </div>
+  );
+}
+
+function OrderActions({ pendingItems, hubStage, setHubStage, grandTotal, setIsCheckoutMode, sentItems, handleSendToKitchen }: any) {
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex justify-between items-center px-1">
+        <span className="text-[var(--color-text-muted)] font-black uppercase text-[10px]">TỔNG CỘNG</span>
+        <span className="text-[var(--color-accent-gold)] text-lg font-black">{new Intl.NumberFormat('vi-VN').format(grandTotal)}đ</span>
+      </div>
+      
+      <div className="flex gap-2 w-full">
+        {hubStage === 'ORDER' && <button onClick={() => setHubStage('UPSELL')} disabled={pendingItems.length === 0} className="flex-1 py-4 bg-[var(--color-accent-gold)] text-black font-black rounded-xl uppercase text-xs disabled:opacity-50 tracking-widest shadow-lg">TIẾP TỤC →</button>}
+        
+        {hubStage === 'UPSELL' && <>
+          <button onClick={() => setHubStage('ORDER')} className="px-5 bg-[var(--color-bg-main)] border border-[var(--color-border-main)] text-white font-bold rounded-xl text-[11px] uppercase">Lùi</button>
+          <button onClick={() => setHubStage('REVIEW')} className="flex-1 py-4 bg-[var(--color-accent-green)] text-black font-black rounded-xl uppercase text-xs tracking-widest shadow-lg">XONG →</button>
+        </>}
+        
+        {hubStage === 'REVIEW' && <>
+          <button onClick={() => setHubStage('UPSELL')} className="px-5 bg-[var(--color-bg-main)] border border-[var(--color-border-main)] text-white font-bold rounded-xl text-[11px] uppercase">Lùi</button>
+          <button onClick={handleSendToKitchen} className="flex-1 py-4 bg-[var(--color-accent-orange)] text-white font-black rounded-xl animate-pulse uppercase text-xs tracking-widest shadow-lg flex items-center justify-center gap-2"><UtensilsCrossed className="w-4 h-4"/> GỬI BẾP</button>
+        </>}
+        
+        {pendingItems.length === 0 && hubStage === 'ORDER' && grandTotal > 0 && (
+          <button onClick={() => setIsCheckoutMode(true)} disabled={sentItems.length > 0} className="flex-1 py-4 border-2 border-[var(--color-accent-green)]/30 text-[var(--color-accent-green)] font-black rounded-xl uppercase text-[11px] tracking-widest bg-[var(--color-accent-green)]/5">THANH TOÁN</button>
+        )}
+      </div>
     </div>
   );
 }

@@ -2,6 +2,7 @@ import React from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useApp } from '../store/AppContext';
 import { ClockWidget } from './ClockWidget';
+import { useBreakpoint } from '../hooks/useBreakpoint';
 import { 
   LayoutDashboard, Database, Zap, Target, Clock, 
   RotateCw, ChefHat, ClipboardList, Users, Settings, LogOut, FileSpreadsheet
@@ -12,11 +13,15 @@ export function Layout() {
   const { currentUser, logout } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
+  const { isDesktop } = useBreakpoint();
 
   const isLiveEntry = location.pathname.startsWith('/live-entry');
 
-  // If Staff or in Live Entry, hide sidebar
-  const hideSidebar = currentUser?.role === 'staff' || isLiveEntry;
+  // If Staff, they only see the entry.
+  // If Manager/Admin on Desktop, they see both Sidebar + Entry.
+  // If Manager/Admin on Mobile/Tablet, hide sidebar for Live Entry focus.
+  const isManager = currentUser?.role === 'admin' || currentUser?.role === 'manager';
+  const hideSidebar = currentUser?.role === 'staff' || (isLiveEntry && !isDesktop);
 
   const navGroups = [
     {
@@ -52,18 +57,6 @@ export function Layout() {
       ]
     }
   ];
-
-  if (isLiveEntry) {
-    return (
-      <div className="flex h-screen-safe w-full max-w-md mx-auto shadow-2xl overflow-hidden bg-[var(--color-bg-main)] text-[var(--color-text-main)] font-sans relative">
-        <main className="flex-1 flex flex-col h-full overflow-hidden relative">
-          <div className="flex-1 overflow-hidden bg-[var(--color-bg-main)]">
-            <Outlet />
-          </div>
-        </main>
-      </div>
-    );
-  }
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[var(--color-bg-main)] text-[var(--color-text-main)] font-sans">
@@ -132,7 +125,10 @@ export function Layout() {
       )}
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col h-full overflow-hidden relative">
+      <main className={cn(
+        "flex-1 flex flex-col h-full overflow-hidden relative",
+        isLiveEntry && !isDesktop && "max-w-md mx-auto shadow-2xl"
+      )}>
         {/* Header - shown mainly for Staff view or quick info */}
         {currentUser?.role === 'staff' && (
           <header className="h-14 border-b border-[var(--color-border-main)] bg-[var(--color-bg-surface)] flex items-center justify-between px-6 shrink-0 shadow-sm">
@@ -162,3 +158,4 @@ export function Layout() {
     </div>
   );
 }
+
