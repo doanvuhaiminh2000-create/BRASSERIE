@@ -10,7 +10,8 @@ import { UpsellAnalysis } from './pages/Analysis/UpsellAnalysis';
 import { SessionHistory } from './pages/LiveEntry/SessionHistory';
 import { POSUpload } from './pages/POSManagement/POSUpload';
 
-import { OperationAnalysis } from './pages/Analysis/OperationAnalysis';
+import { ServiceTimeAnalysis } from './pages/Analysis/ServiceTimeAnalysis';
+import { TableTurnoverAnalysis } from './pages/Analysis/TableTurnoverAnalysis';
 import { KitchenAnalysis } from './pages/Analysis/KitchenAnalysis';
 import { MenuAnalysis } from './pages/Analysis/MenuAnalysis';
 import { StaffAnalysis } from './pages/Analysis/StaffAnalysis';
@@ -19,6 +20,8 @@ import { MenuManagement } from './pages/MenuManagement/MenuManagement';
 import { ToastContainer } from './components/ui/Toast';
 import { ConfirmModalContainer } from './components/ui/ConfirmModal';
 import { ConnectionStatus } from './components/ui/ConnectionStatus';
+
+import { Settings as SettingsPage } from './pages/Settings/Settings';
 
 // Placeholder Auth Guard
 const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactNode, allowedRoles?: string[] }) => {
@@ -47,13 +50,13 @@ export default function App() {
           <Route path="/pos-upload" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><POSUpload /></ProtectedRoute>} />
           <Route path="/live-history" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><SessionHistory /></ProtectedRoute>} />
           <Route path="/analysis/upsell" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><UpsellAnalysis /></ProtectedRoute>} />
-          <Route path="/analysis/service-time" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><OperationAnalysis /></ProtectedRoute>} />
-          <Route path="/analysis/table-turnover" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><OperationAnalysis /></ProtectedRoute>} />
+          <Route path="/analysis/service-time" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><ServiceTimeAnalysis /></ProtectedRoute>} />
+          <Route path="/analysis/table-turnover" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><TableTurnoverAnalysis /></ProtectedRoute>} />
           <Route path="/analysis/kitchen" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><KitchenAnalysis /></ProtectedRoute>} />
           <Route path="/analysis/menu" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><MenuAnalysis /></ProtectedRoute>} />
           <Route path="/analysis/staff" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><StaffAnalysis /></ProtectedRoute>} />
           <Route path="/menu-management" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><MenuManagement /></ProtectedRoute>} />
-          <Route path="/settings" element={<div className="p-8 text-white">Cài Đặt Hệ Thống - Coming soon</div>} />
+          <Route path="/settings" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><SettingsPage /></ProtectedRoute>} />
         </Route>
       </Routes>
     </>

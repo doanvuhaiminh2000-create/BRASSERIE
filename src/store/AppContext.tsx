@@ -5,6 +5,8 @@ import { MenuItemFull, POSBatch } from '../types/store';
 import { mockUsers, generateMockTables } from '../data/mockData';
 import { dataStore, db } from '../services/dataStore';
 
+import { toast } from '../components/ui/Toast';
+
 interface AppState {
   currentUser: User | null;
   users: User[];
@@ -31,6 +33,7 @@ interface AppContextType extends AppState {
   recordUpsellAttempt: (tableId: number, attempt: { menuItemId: string, result: 'TC' | 'TChối', reason?: string }) => Promise<void>;
   checkoutSession: (tableId: number, paymentMethod: 'Tiền Mặt' | 'Thẻ NCB' | 'VietQR' | 'Voucher') => Promise<void>;
   setMenu: (menu: MenuItemFull[]) => Promise<void>;
+  clearMenu: () => Promise<void>;
   toggleMenuItemActive: (id: string) => Promise<void>;
 }
 
@@ -334,6 +337,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     await dataStore.saveMenuItems(newMenu);
   };
 
+  const clearMenu = async () => {
+    try {
+      await db.menu_items.clear();
+      toast.success("Đã xóa toàn bộ menu thành công!");
+    } catch (error) {
+      console.error("Clear menu error:", error);
+      toast.error("Không thể xóa menu. Vui lòng thử lại.");
+    }
+  };
+
   const toggleMenuItemActive = async (id: string) => {
     const item = menu.find(m => m.posCode === id);
     if (!item) return;
@@ -345,8 +358,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     currentUser, users, menu, tables, sessions, isReady, posBatches, posAggregateByPosCode,
     login, logout, updateTable, createSession, updateSession, 
     addItem, updatePendingItemQty, removePendingItem, sendRoundToKitchen, serveItem, cancelItem, recordUpsellAttempt, checkoutSession,
-    setMenu, toggleMenuItemActive
-  }), [currentUser, users, menu, tables, sessions, isReady, posBatches, posAggregateByPosCode]);
+    setMenu, clearMenu, toggleMenuItemActive
+  }), [currentUser, users, menu, tables, sessions, isReady, posBatches, posAggregateByPosCode, clearMenu, setMenu, toggleMenuItemActive]);
 
   return (
     <AppContext.Provider value={value}>

@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { useApp } from '../../store/AppContext';
-import { Upload, Search, CheckCircle2, AlertCircle, FileText, X, Layers } from 'lucide-react';
+import { Upload, Search, CheckCircle2, AlertCircle, FileText, X, Layers, Trash2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { toast } from '../../components/ui/Toast';
+import { confirmModal } from '../../components/ui/ConfirmModal';
 import { parseMenuMapping, parseMenuRecipe } from '../../services/menuMatcher';
 import { MenuItemFull } from '../../types/store';
 
 export function MenuManagement() {
-  const { menu, setMenu, toggleMenuItemActive } = useApp();
+  const { menu, setMenu, clearMenu, toggleMenuItemActive } = useApp();
   const [activeRootTab, setActiveRootTab] = useState<'MAPPING' | 'RECIPE'>('MAPPING');
 
   // Mapping Tab State
@@ -18,7 +20,7 @@ export function MenuManagement() {
   // Recipe Tab State
   const [recipeUploadStatus, setRecipeUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
   const [recipeErrorMsg, setRecipeErrorMsg] = useState<string | null>(null);
-  const [unmatchedRecipes, setUnmatchedRecipes] = useState<Array<{ recipeName: string; cost: number; price: number; suggestions: string[] }>>([]);
+  const [unmatchedRecipes, setUnmatchedRecipes] = useState<Array<{ recipeName: string; cost: number; price: number; suggestions: string[]; selectedMatch?: string }>>([]);
 
   const sections = Array.from(new Set(menu.map(m => m.section))).filter(Boolean);
 
@@ -97,26 +99,35 @@ export function MenuManagement() {
   };
 
   const handleManualMatch = async (unmatchedIdx: number, menuDisplayNameEN: string) => {
-    if (!menuDisplayNameEN) return;
-    const u = unmatchedRecipes[unmatchedIdx];
-    
-    // Find menu item and update
-    const newMenu = [...menu];
-    const matchIdx = newMenu.findIndex(m => m.displayNameEN === menuDisplayNameEN);
-    if (matchIdx >= 0) {
-      newMenu[matchIdx] = {
-        ...newMenu[matchIdx],
-        cost: u.cost,
-        priceFromRecipe: u.price,
-        costSource: 'manual',
-        recipeMatchMethod: 'manual',
-        costUpdatedAt: Date.now()
-      };
-      await setMenu(newMenu);
+    try {
+      if (!menuDisplayNameEN) return;
+      const u = unmatchedRecipes[unmatchedIdx];
+      
+      // Find menu item and update
+      const newMenu = [...menu];
+      const matchIdx = newMenu.findIndex(m => m.displayNameEN === menuDisplayNameEN);
+      if (matchIdx >= 0) {
+        newMenu[matchIdx] = {
+          ...newMenu[matchIdx],
+          cost: u.cost,
+          priceFromRecipe: u.price,
+          costSource: 'manual',
+          recipeMatchMethod: 'manual',
+          costUpdatedAt: Date.now()
+        };
+        await setMenu(newMenu);
+        toast.success(`Đã cập nhật cost: ${menuDisplayNameEN}`);
+      } else {
+        toast.error(`Lỗi: Không tìm thấy món '${menuDisplayNameEN}' trong Menu.`);
+        return;
+      }
+      
+      // Remove from unmatched
+      setUnmatchedRecipes(prev => prev.filter((_, i) => i !== unmatchedIdx));
+    } catch (err: any) {
+      console.error('Error in manual match:', err);
+      toast.error(`Lỗi xử lý: ${err.message || 'Lỗi không xác định'}`);
     }
-    
-    // Remove from unmatched
-    setUnmatchedRecipes(prev => prev.filter((_, i) => i !== unmatchedIdx));
   };
 
   const skipUnmatched = (unmatchedIdx: number) => {
@@ -166,7 +177,26 @@ export function MenuManagement() {
               <p className="text-[var(--color-text-muted)] text-lg">Đồng bộ danh sách sản phẩm từ file Excel (Menu_online) để kết nối với hệ thống POS.</p>
             </div>
             
-            <div className="flex gap-4">
+            <div className="flex gap-4 items-center">
+              {menu.length > 0 && (
+                <button
+                   onClick={async () => {
+                     const ok = await confirmModal({
+                       title: 'Xóa toàn bộ menu',
+                       message: 'Bạn có chắc chắn muốn xóa toàn bộ menu hiện tại? Hành động này không thể hoàn tác.',
+                       confirmText: 'XÓA NGAY',
+                       danger: true
+                     });
+                     if (ok) {
+                       clearMenu();
+                     }
+                   }}
+                   className="flex items-center gap-2 px-6 py-3 bg-[var(--color-bg-surface)] border border-[var(--color-accent-red)] text-[var(--color-accent-red)] font-bold rounded-xl hover:bg-[var(--color-accent-red)] hover:text-white transition-all cursor-pointer shadow-lg active:scale-95"
+                >
+                  <Trash2 className="w-5 h-5" />
+                  XÓA MENU HIỆN TẠI
+                </button>
+              )}
               <input 
                 type="file" id="menu-upload" className="hidden" accept=".xlsx,.xls,.csv" onChange={handleMappingUpload}
               />
@@ -283,7 +313,35 @@ export function MenuManagement() {
               <p className="text-[var(--color-text-muted)] text-lg">Phân phối giá cost từ file định lượng (menu_định_lượng.xlsx) vào danh sách món ăn hiện hành dựa trên Tên Tiếng Anh.</p>
             </div>
             
-            <div className="flex gap-4">
+            <div className="flex gap-4 items-center">
+              {menu.some(m => m.cost !== undefined && m.cost > 0) && (
+                <button
+                   onClick={async () => {
+                     const ok = await confirmModal({
+                       title: 'Xóa cost định lượng',
+                       message: 'Bạn có chắc chắn muốn xóa toàn bộ dữ liệu định lượng (Cost) đã liên kết? (Danh sách món vẫn được giữ nguyên)',
+                       confirmText: 'XÓA COST',
+                       danger: true
+                     });
+                     if (ok) {
+                       const clearedMenu = menu.map(m => ({
+                         ...m,
+                         cost: undefined,
+                         priceFromRecipe: undefined,
+                         costSource: undefined,
+                         recipeMatchMethod: undefined,
+                         costUpdatedAt: undefined
+                       }));
+                       await setMenu(clearedMenu);
+                       toast.success("Đã xóa toàn bộ dữ liệu định lượng (Cost)");
+                     }
+                   }}
+                   className="flex items-center gap-2 px-6 py-3 bg-[var(--color-bg-surface)] border border-[var(--color-accent-red)] text-[var(--color-accent-red)] font-bold rounded-xl hover:bg-[var(--color-accent-red)] hover:text-white transition-all cursor-pointer shadow-lg active:scale-95"
+                >
+                  <Trash2 className="w-5 h-5" />
+                  XÓA ĐỊNH LƯỢNG (COST)
+                </button>
+              )}
               <input 
                 type="file" id="recipe-upload" className="hidden" accept=".xlsx,.xls,.csv" onChange={handleRecipeUpload}
               />
@@ -328,23 +386,37 @@ export function MenuManagement() {
                         <td className="p-3 text-white font-medium">{u.recipeName}</td>
                         <td className="p-3 text-right text-[var(--color-accent-blue)] font-bold">{u.cost.toLocaleString('vi-VN')}</td>
                         <td className="p-3">
-                          <select 
-                            className="bg-[var(--color-bg-surface)] text-white text-xs px-3 py-2 rounded-lg border border-[var(--color-border-main)] focus:border-amber-500 outline-none w-full max-w-sm"
-                            onChange={(e) => handleManualMatch(i, e.target.value)}
-                            defaultValue=""
-                          >
-                            <option value="" disabled>-- Chọn món tương ứng --</option>
-                            <optgroup label="✨ Món có tên gần giống">
-                              {u.suggestions.map(s => (
-                                <option value={s} key={s}>★ {s}</option>
-                              ))}
-                            </optgroup>
-                            <optgroup label="Tất cả món trong Menu Online">
-                              {menu.map(m => (
-                                <option key={m.posCode} value={m.displayNameEN}>{m.displayNameEN}</option>
-                              ))}
-                            </optgroup>
-                          </select>
+                          <div className="flex gap-2">
+                            <select 
+                              className="bg-[var(--color-bg-surface)] text-white text-xs px-3 py-2 rounded-lg border border-[var(--color-border-main)] focus:border-amber-500 outline-none flex-1 max-w-[200px]"
+                              onChange={(e) => {
+                                const newUnmatched = [...unmatchedRecipes];
+                                newUnmatched[i].selectedMatch = e.target.value;
+                                setUnmatchedRecipes(newUnmatched);
+                              }}
+                              value={u.selectedMatch || ""}
+                            >
+                              <option value="" disabled>-- Chọn món tương ứng --</option>
+                              <optgroup label="✨ Món có tên gần giống">
+                                {u.suggestions.map(s => (
+                                  <option value={s} key={s}>★ {s}</option>
+                                ))}
+                              </optgroup>
+                              <optgroup label="Tất cả món trong Menu Online">
+                                {menu.map(m => (
+                                  <option key={m.posCode} value={m.displayNameEN}>{m.displayNameEN}</option>
+                                ))}
+                              </optgroup>
+                            </select>
+                            {u.selectedMatch && (
+                              <button 
+                                onClick={() => handleManualMatch(i, u.selectedMatch!)}
+                                className="px-3 py-1.5 bg-amber-500 text-black font-bold rounded-lg text-xs hover:bg-amber-400 transition-colors"
+                              >
+                                Xác nhận
+                              </button>
+                            )}
+                          </div>
                         </td>
                         <td className="p-3 text-center">
                           <button 
