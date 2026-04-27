@@ -7,6 +7,7 @@ import { Lock, Clock, Settings, Save, Move, Plus, Trash2, Edit2, X } from 'lucid
 
 import { toast } from '../../components/ui/Toast';
 import { confirmModal } from '../../components/ui/ConfirmModal';
+import { db } from '../../services/dataStore';
 
 export function TableMap() {
   const { tables, zones, sessions, currentUser, updateTable, addTable, deleteTable, createSession } = useApp();
@@ -170,8 +171,9 @@ export function TableMap() {
                 danger: true
               });
               if (ok) {
-                localStorage.removeItem('brasserie_tables');
-                localStorage.removeItem('brasserie_sessions');
+                await db.app_settings.delete('brasserie_tables');
+                await db.app_settings.delete('brasserie_zones');
+                await db.live_sessions.clear();
                 window.location.reload();
               }
             }}

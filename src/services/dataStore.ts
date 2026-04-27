@@ -70,8 +70,10 @@ export const dataStore = {
 
   // WARNING: This is a destructive operation. It will clear all existing sessions and replace them.
   async replaceAllSessions(sessions: OrderSession[]) {
-    await db.live_sessions.clear();
-    await db.live_sessions.bulkPut(sessions);
+    await db.transaction('rw', db.live_sessions, async () => {
+      await db.live_sessions.clear();
+      await db.live_sessions.bulkPut(sessions);
+    });
   },
   
   // --- Menu Items ---
@@ -80,8 +82,10 @@ export const dataStore = {
   },
   
   async saveMenuItems(items: MenuItemFull[]) {
-    await db.menu_items.clear();
-    await db.menu_items.bulkPut(items);
+    await db.transaction('rw', db.menu_items, async () => {
+      await db.menu_items.clear();
+      await db.menu_items.bulkPut(items);
+    });
   },
   
   // --- App Settings ---

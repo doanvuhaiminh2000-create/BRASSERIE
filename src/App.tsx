@@ -17,7 +17,7 @@ import { MenuAnalysis } from './pages/Analysis/MenuAnalysis';
 import { StaffAnalysis } from './pages/Analysis/StaffAnalysis';
 import { MenuManagement } from './pages/MenuManagement/MenuManagement';
 
-import { ToastContainer } from './components/ui/Toast';
+import { ToastContainer, toast } from './components/ui/Toast';
 import { ConfirmModalContainer } from './components/ui/ConfirmModal';
 import { ConnectionStatus } from './components/ui/ConnectionStatus';
 
@@ -33,6 +33,22 @@ const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactNode,
 
 export default function App() {
   const { currentUser } = useApp();
+
+  React.useEffect(() => {
+    if (!window.indexedDB) {
+      toast.error('Trình duyệt không hỗ trợ lưu dữ liệu local. Vui lòng dùng Chrome/Edge/Safari mới nhất, không dùng chế độ ẩn danh.');
+    }
+    if (navigator.storage && navigator.storage.estimate) {
+      navigator.storage.estimate().then(est => {
+        if (est.quota && est.quota < 50 * 1024 * 1024) {
+          toast.error('Dung lượng lưu trữ thấp, dữ liệu có thể bị xóa.');
+        }
+      });
+      if (navigator.storage.persist) {
+        navigator.storage.persist().catch(console.error);
+      }
+    }
+  }, []);
 
   return (
     <>

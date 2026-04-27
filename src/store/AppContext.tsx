@@ -47,7 +47,7 @@ interface AppContextType extends AppState {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [isTablesLoaded, setIsTablesLoaded] = useState(false);
+  const [tablesHydrated, setTablesHydrated] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     const saved = localStorage.getItem('brasserie_user');
     return saved ? JSON.parse(saved) : null;
@@ -66,7 +66,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const menu = _menu || [];
   const posBatches = _posBatches || [];
 
-  const isReady = isTablesLoaded && _sessions !== undefined && _menu !== undefined && _posBatches !== undefined;
+  const isReady = tablesHydrated && _sessions !== undefined && _menu !== undefined && _posBatches !== undefined;
 
   const posAggregateByPosCode = useMemo(() => {
     const map = new Map();
@@ -115,18 +115,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         await dataStore.setSetting('brasserie_tables', defaultTables);
         await dataStore.setSetting('brasserie_zones', uniqueZones);
       }
-      setIsTablesLoaded(true);
+      setTablesHydrated(true);
     };
     initApp();
   }, []);
 
   // Save tables changes to DB Setting
   useEffect(() => {
-    if (isReady) {
+    if (tablesHydrated) {
       dataStore.setSetting('brasserie_tables', tables);
       dataStore.setSetting('brasserie_zones', zones);
     }
-  }, [tables, zones, isReady]);
+  }, [tables, zones, tablesHydrated]);
 
   // Auth
   const login = (userId: string, pin: string) => {
