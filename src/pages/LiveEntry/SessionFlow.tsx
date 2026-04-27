@@ -67,6 +67,12 @@ export function SessionFlow() {
   if (!activeSession) {
     return (
       <div className="flex flex-col h-full bg-[var(--color-bg-main)] relative">
+        <div className="flex-none flex items-center justify-between p-4 bg-[var(--color-bg-surface)] border-b border-[var(--color-border-main)]">
+           <span className="text-xs font-black text-white uppercase">Mở Bàn {table.name}</span>
+           <button onClick={() => navigate('/live-entry')} className="text-[10px] font-black text-[var(--color-text-muted)] hover:text-white flex items-center gap-1 uppercase">
+             <XCircle className="w-4 h-4" /> THOÁT
+           </button>
+        </div>
         <T1GuestSeated table={table} createSession={createSession} />
       </div>
     );
@@ -123,8 +129,19 @@ export function SessionFlow() {
     <div className="flex flex-col h-full bg-[var(--color-bg-main)] overflow-hidden">
       {/* 1. ĐẦU MỤC QUAN TRỌNG */}
       <div className="flex-none flex flex-col pb-2 bg-[var(--color-bg-surface)] border-b border-[var(--color-border-main)]">
+        {/* Table info & Exit for mobile */}
+        <div className="flex items-center justify-between px-3 pt-3 pb-1">
+           <div className="flex items-center gap-2">
+              <div className={cn("w-1.5 h-1.5 rounded-full", activeSession ? "bg-red-500 animate-pulse" : "bg-green-500")} />
+              <span className="text-[10px] font-black text-white uppercase tracking-tight">Bàn {table.name} • {activeSession?.guestCount || 0} khách</span>
+           </div>
+           <button onClick={() => navigate('/live-entry')} className="text-[9px] font-black text-[var(--color-text-muted)] hover:text-white flex items-center gap-1 uppercase bg-[var(--color-bg-main)]/50 px-2 py-1 rounded-lg border border-[var(--color-border-main)] transition-all active:scale-95">
+              <XCircle className="w-3.5 h-3.5" /> THOÁT RA BẢN ĐỒ
+           </button>
+        </div>
+
         {/* Stages */}
-        <div className="flex px-3 pt-3 gap-1 shrink-0">
+        <div className="flex px-3 pt-2 gap-1 shrink-0">
           {['ORDER', 'UPSELL', 'REVIEW'].map((s, idx) => (
             <div key={s} className={cn("flex-1 py-1.5 rounded-lg text-[10px] font-black text-center transition-all border", hubStage === s ? "bg-[var(--color-accent-gold)] text-black border-[var(--color-accent-gold)]" : "text-[var(--color-text-muted)] border-transparent bg-[var(--color-bg-main)]/50")}>
               {idx + 1}. {s === 'ORDER' ? 'GỌI MÓN' : s === 'UPSELL' ? 'UPSELL' : 'XÁC NHẬN'}

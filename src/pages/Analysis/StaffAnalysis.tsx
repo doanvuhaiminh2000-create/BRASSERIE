@@ -24,7 +24,7 @@ export function StaffAnalysis() {
   }, [filteredSessions]);
 
   const staffPerformance = useMemo(() => {
-    return Object.entries(metrics).map(([staffId, data]) => {
+    return (Object.entries(metrics) as [string, any][]).map(([staffId, data]) => {
       const user = users.find(u => u.id === staffId);
       return {
         id: staffId,

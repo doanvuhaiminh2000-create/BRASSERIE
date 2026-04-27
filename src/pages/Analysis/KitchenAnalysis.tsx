@@ -57,12 +57,14 @@ export function KitchenAnalysis() {
 
   return (
     <div className="p-6 md:p-8 space-y-6 pb-20">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-4">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-4 relative z-50">
         <div>
           <h2 className="text-3xl font-bold text-white tracking-tight uppercase">Hiệu Quả Bếp (Kitchen Performance)</h2>
           <p className="text-[var(--color-text-muted)] text-sm mt-1">Phân tích tốc độ ra món dựa trên thời điểm SEND KITCHEN và SERVE ITEM.</p>
         </div>
-        <DateRangePicker startDate={startDate} setStartDate={setStartDate} endDate={endDate} setEndDate={setEndDate} />
+        <div className="relative z-50">
+          <DateRangePicker startDate={startDate} setStartDate={setStartDate} endDate={endDate} setEndDate={setEndDate} />
+        </div>
       </div>
 
       <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-3 text-blue-400 text-sm flex items-center gap-2">

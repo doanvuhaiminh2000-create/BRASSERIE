@@ -14,40 +14,28 @@ export function DateRangePicker({
   endDate, setEndDate,
   className = ""
 }: DateRangePickerProps) {
-  const formatDate = (dateStr: string) => {
-    if (!dateStr) return 'dd/mm/yyyy';
-    const [y, m, d] = dateStr.split('-');
-    return `${d}/${m}/${y}`;
-  };
-
   return (
     <div className={`flex flex-col gap-1.5 ${className}`}>
       <div className="flex items-center gap-3 bg-[var(--color-bg-surface)] border border-[var(--color-border-main)] rounded-xl p-2 focus-within:border-[var(--color-accent-gold)] focus-within:ring-1 focus-within:ring-[var(--color-accent-gold)] transition-all">
         <div className="flex items-center gap-2 pl-2">
           <Calendar className="w-4 h-4 text-[var(--color-accent-gold)]" />
           <div className="flex items-center gap-1">
-            <div className="relative group/dt">
+            <div className="relative border-b border-transparent hover:border-[var(--color-accent-gold)] transition-colors">
               <input 
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="absolute inset-0 opacity-0 cursor-pointer z-10 w-full"
+                className="bg-transparent text-white text-xs font-bold outline-none cursor-pointer [color-scheme:dark] px-1"
               />
-              <div className="bg-transparent text-white text-xs font-bold px-1 py-1 rounded hover:bg-white/5 transition-colors">
-                {formatDate(startDate)}
-              </div>
             </div>
             <span className="text-[var(--color-text-muted)] text-xs font-bold mx-0.5">-</span>
-            <div className="relative group/dt">
+            <div className="relative border-b border-transparent hover:border-[var(--color-accent-gold)] transition-colors">
               <input 
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className="absolute inset-0 opacity-0 cursor-pointer z-10 w-full"
+                className="bg-transparent text-white text-xs font-bold outline-none cursor-pointer [color-scheme:dark] px-1"
               />
-              <div className="bg-transparent text-white text-xs font-bold px-1 py-1 rounded hover:bg-white/5 transition-colors">
-                {formatDate(endDate)}
-              </div>
             </div>
           </div>
         </div>
