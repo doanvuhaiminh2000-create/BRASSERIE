@@ -14,3 +14,5 @@
 - Refactor logic `isReady` context state để đồng bộ hóa cho đến khi Dexie DB (menu, sessions, pos_batches) hoàn tất hydrate dữ liệu. Tránh undefined error trong những milliseconds đầu của React render tree.
 - Bọc toàn bộ các action cập nhật database (Session, createSession, updateSession) vào blocks `try...catch` cùng `toast.error`, ngăn chặn lỗi Uncaught Promise.
 - Kiểm tra toàn bộ types in `src/types.ts` và `src/types/store.ts` đảm bảo đầy đủ strict-type check.
+- Ẩn các Metrics Live không dùng trên Dashboard.
+- **Biểu đồ Cải tiến (`MenuAnalysis.tsx`)**: Bổ sung `ZAxis` map theo `revenue` để thay đổi kích thước bong bóng trên biểu đồ ScatterChart, `fillOpacity` 0.75 để pha trộn màu khi trùng điểm, và Select dropdown `selectedSection` để chia tiết kiệm hiển thị Nhóm món (giảm bớt lượng bong bóng đè nhau một lúc do quá đông).

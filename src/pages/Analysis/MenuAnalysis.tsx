@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, ReferenceLine, BarChart, Bar, Legend, PieChart, Pie } from 'recharts';
+import { ScatterChart, Scatter, XAxis, YAxis, ZAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, ReferenceLine, BarChart, Bar, Legend, PieChart, Pie } from 'recharts';
 import { Star, DollarSign, TrendingUp, AlertTriangle, ArrowRight, Search, Layers, Database } from 'lucide-react';
 import { formatCurrency, cn } from '../../lib/utils';
 import { useApp } from '../../store/AppContext';
@@ -56,6 +56,7 @@ export function MenuAnalysis() {
   const [activeTab, setActiveTab] = useState<'MATRIX' | 'TABLE' | 'SECTION'>('MATRIX');
   const [searchTerm, setSearchTerm] = useState('');
   const [showTop50, setShowTop50] = useState(false);
+  const [selectedSection, setSelectedSection] = useState<string>('ALL');
   const [hoveredQuadrant, setHoveredQuadrant] = useState<string | null>(null);
 
   const activeRange = useMemo(() => getDateRangeStrings(dateFilter, startDate, endDate), [dateFilter, startDate, endDate]);
@@ -255,15 +256,35 @@ export function MenuAnalysis() {
         <StatCard title="Cần Review (Dog)" value={dogsCount} icon={AlertTriangle} color="var(--color-accent-red)" />
       </div>
 
-      {activeTab === 'MATRIX' && (
+      {activeTab === 'MATRIX' && (() => {
+        const uniqueSections = Array.from(new Set(menuMatrix.map((m: any) => m.section))).filter(Boolean);
+        let filteredMatrix = menuMatrix;
+        if (selectedSection !== 'ALL') {
+          filteredMatrix = filteredMatrix.filter((m: any) => m.section === selectedSection);
+        }
+        if (showTop50) {
+          filteredMatrix = [...filteredMatrix].sort((a,b) => b.revenue - a.revenue).slice(0, Math.ceil(filteredMatrix.length / 2));
+        }
+
+        return (
         <div className="bg-[var(--color-bg-surface)] border border-[var(--color-border-main)] rounded-2xl p-6 shadow-xl animate-in fade-in zoom-in-95 duration-500">
           <div className="flex justify-between items-center mb-6">
              <h3 className="font-bold text-white uppercase tracking-wider text-sm">Biểu Đồ Ma Trận Lượt Bán vs Lợi Nhuận</h3>
-             <Toggle 
-               checked={showTop50}
-               onChange={setShowTop50}
-               label="Top 50% Doanh Thu"
-             />
+             <div className="flex flex-col md:flex-row items-center gap-4">
+                 <select 
+                   value={selectedSection}
+                   onChange={e => setSelectedSection(e.target.value)}
+                   className="bg-[var(--color-bg-main)] text-white text-xs font-bold px-3 py-1.5 rounded border border-[var(--color-border-main)] outline-none cursor-pointer uppercase tracking-widest min-w-[150px]"
+                 >
+                   <option value="ALL">TẤT CẢ NHÓM MÓN</option>
+                   {uniqueSections.map(s => <option key={String(s)} value={String(s)}>{String(s)}</option>)}
+                 </select>
+                 <Toggle 
+                   checked={showTop50}
+                   onChange={setShowTop50}
+                   label="Top 50% Doanh Thu"
+                 />
+             </div>
           </div>
           
           {totalVol === 0 ? (
@@ -280,6 +301,7 @@ export function MenuAnalysis() {
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-main)" />
                   <XAxis type="number" dataKey="qty" name="Lượt bán" stroke="var(--color-text-muted)" tickLine={false} axisLine={false} />
                   <YAxis type="number" dataKey="marginPct" name="Lợi nhuận (%)" stroke="var(--color-text-muted)" tickLine={false} axisLine={false} domain={[(dataMin: number) => Math.min(0, Math.floor(dataMin - 10)), (dataMax: number) => Math.max(100, Math.ceil(dataMax + 10))]} />
+                  <ZAxis type="number" dataKey="revenue" range={[40, 400]} />
                   
                   <Tooltip 
                     cursor={{ strokeDasharray: '3 3' }} 
@@ -311,15 +333,17 @@ export function MenuAnalysis() {
                   <ReferenceLine x={globalMedQty} stroke="var(--color-text-muted)" strokeDasharray="3 3" />
                   <ReferenceLine y={globalMedMargin} stroke="var(--color-text-muted)" strokeDasharray="3 3" />
                   <Scatter 
-                    data={showTop50 ? [...menuMatrix].sort((a,b) => b.revenue - a.revenue).slice(0, Math.ceil(menuMatrix.length / 2)) : menuMatrix}
+                    data={filteredMatrix}
                     onMouseEnter={(data) => setHoveredQuadrant(data.category)}
                     onMouseLeave={() => setHoveredQuadrant(null)}
                   >
-                    {(showTop50 ? [...menuMatrix].sort((a,b) => b.revenue - a.revenue).slice(0, Math.ceil(menuMatrix.length / 2)) : menuMatrix).map((entry: any, index: number) => (
+                    {filteredMatrix.map((entry: any, index: number) => (
                       <Cell 
                         key={`cell-${index}`} 
                         fill={getCategoryColor(entry.category)}
-                        opacity={hoveredQuadrant && hoveredQuadrant !== entry.category ? 0.1 : 1}
+                        fillOpacity={hoveredQuadrant && hoveredQuadrant !== entry.category ? 0.1 : 0.75}
+                        stroke="var(--color-bg-surface)"
+                        strokeWidth={1}
                       />
                     ))}
                   </Scatter>
@@ -328,7 +352,8 @@ export function MenuAnalysis() {
             </div>
           )}
         </div>
-      )}
+      );
+      })()}
 
       {activeTab === 'TABLE' && (
         <div className="bg-[var(--color-bg-surface)] border border-[var(--color-border-main)] rounded-2xl shadow-xl overflow-hidden animate-in fade-in duration-500">
