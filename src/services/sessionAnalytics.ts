@@ -70,9 +70,10 @@ export const sessionAnalytics = {
           const attempt = s.upsellAttempts?.find(a => a.menuItemId === item.menuItem.posCode && a.result === 'TC');
           const sid = attempt ? attempt.staffId : s.openedByStaffId;
           
-          if (staffAttemptsMap[sid]) {
-             staffAttemptsMap[sid].revenue += itemRev;
+          if (!staffAttemptsMap[sid]) {
+             staffAttemptsMap[sid] = { attempts: 0, success: 0, revenue: 0, staffName: attempt ? attempt.staffName : 'Unknown' };
           }
+          staffAttemptsMap[sid].revenue += itemRev;
         }
       });
     });
@@ -153,22 +154,27 @@ export const sessionAnalytics = {
       const logs = s.eventLogs || [];
 
       items.forEach(item => {
-        if (item.sentAt && item.status === 'SERVED') {
+        let cookTime: number | null = null;
+        if (item.status === 'SERVED' && item.sentAt) {
           // Find logic: nearest SERVE_ITEM log after sentAt for this item
           const serveLog = logs.find(l => l.action === 'SERVE_ITEM' && l.time >= item.sentAt! && l.targetItemId === item.id);
           if (serveLog) {
-            const cookTime = serveLog.time - item.sentAt;
-            const station = item.menuItem.station;
-            
-            if (!stationMap[station]) stationMap[station] = { totalTime: 0, count: 0 };
-            stationMap[station].totalTime += cookTime;
-            stationMap[station].count++;
-
-            const itemName = item.menuItem.displayName;
-            if (!itemCookTimes[itemName]) itemCookTimes[itemName] = { totalTime: 0, count: 0 };
-            itemCookTimes[itemName].totalTime += cookTime;
-            itemCookTimes[itemName].count++;
+            cookTime = serveLog.time - item.sentAt;
           }
+        } else if (item.status === 'SENT' && item.sentAt) {
+          cookTime = Date.now() - item.sentAt;
+        }
+
+        if (cookTime !== null) {
+          const station = item.menuItem?.station || 'N';
+          if (!stationMap[station]) stationMap[station] = { totalTime: 0, count: 0 };
+          stationMap[station].totalTime += cookTime;
+          stationMap[station].count++;
+
+          const itemName = item.menuItem.displayName;
+          if (!itemCookTimes[itemName]) itemCookTimes[itemName] = { totalTime: 0, count: 0 };
+          itemCookTimes[itemName].totalTime += cookTime;
+          itemCookTimes[itemName].count++;
         }
       });
     });
