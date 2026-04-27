@@ -5,6 +5,9 @@ import { Table, TableStatus, OrderSession } from '../../types';
 import { cn } from '../../lib/utils';
 import { Lock, Clock } from 'lucide-react';
 
+import { toast } from '../../components/ui/Toast';
+import { confirmModal } from '../../components/ui/ConfirmModal';
+
 export function TableMap() {
   const { tables, sessions, currentUser, updateTable, createSession } = useApp();
   const navigate = useNavigate();
@@ -17,15 +20,25 @@ export function TableMap() {
     return () => clearInterval(timer);
   }, []);
 
-  const handleTableClick = (table: Table) => {
+  const isTableLockedByOther = (table: Table) => {
+    return table.lockedBy && table.lockedBy !== currentUser?.id && table.lockedAt && (Date.now() - table.lockedAt < 10 * 60 * 1000);
+  };
+
+  const handleTableClick = async (table: Table) => {
     // Check if locked by someone else
-    if (table.status === 'KHOA' && table.lockedBy !== currentUser?.id) {
+    if (isTableLockedByOther(table)) {
       if (currentUser?.role === 'admin' || currentUser?.role === 'manager') {
-        if (window.confirm(`Bàn đang bị khóa bởi ${table.lockedBy}. Bạn có muốn mở khóa cưỡng bức không?`)) {
-          updateTable(table.id, { status: 'TRONG', lockedBy: null, lockedAt: null });
+        const ok = await confirmModal({
+          title: 'Mở khóa bàn cưỡng bức',
+          message: `Bàn đang bị khóa bởi ${table.lockedBy}. Bạn có muốn mở khóa cưỡng bức không?`,
+          confirmText: 'MỞ KHÓA',
+          danger: true
+        });
+        if (ok) {
+          updateTable(table.id, { lockedBy: null, lockedAt: null });
         }
       } else {
-        alert(`Bàn đang được ${table.lockedBy} sử dụng. Vui lòng liên hệ quản lý nếu cần hỗ trợ.`);
+        toast.error(`Bàn đang được ${table.lockedBy} sử dụng. Vui lòng liên hệ quản lý nếu cần hỗ trợ.`);
       }
       return;
     }
@@ -65,7 +78,7 @@ export function TableMap() {
   };
 
   const getStatusColor = (table: Table, metrics: any) => {
-    if (table.status === 'KHOA') return 'border-[var(--color-border-main)] bg-[var(--color-bg-surface)] text-[var(--color-text-muted)] opacity-50';
+    if (isTableLockedByOther(table)) return 'border-[var(--color-border-main)] bg-[var(--color-bg-surface)] text-[var(--color-text-muted)] opacity-50';
     if (!metrics) return 'border-[var(--color-accent-green)]/50 border-dashed text-[var(--color-accent-green)]';
     
     if (metrics.sent > 0) return 'border-[var(--color-accent-orange)] bg-[var(--color-accent-orange)]/10 text-[var(--color-accent-orange)]';
@@ -82,8 +95,14 @@ export function TableMap() {
         <div className="flex items-center gap-4">
           <h2 className="text-xl font-semibold text-white">Sơ Đồ Bàn</h2>
           <button 
-            onClick={() => {
-              if (window.confirm('Bạn có muốn xóa toàn bộ dữ liệu demo (sessions & tables) để test lại từ đầu không?')) {
+            onClick={async () => {
+              const ok = await confirmModal({
+                title: 'Reset Dữ Liệu Test',
+                message: 'Bạn có muốn xóa toàn bộ dữ liệu demo (sessions & tables) để test lại từ đầu không?',
+                confirmText: 'RESET',
+                danger: true
+              });
+              if (ok) {
                 localStorage.removeItem('brasserie_tables');
                 localStorage.removeItem('brasserie_sessions');
                 window.location.reload();
@@ -127,7 +146,7 @@ export function TableMap() {
                     >
                       <span className="text-xl font-bold">{table.name}</span>
                       
-                      {table.status === 'KHOA' ? (
+                      {isTableLockedByOther(table) || (table.lockedBy === currentUser?.id) ? (
                          <div className="flex items-center gap-1 mt-1 text-[10px]">
                            <Lock className="w-3 h-3" />
                            <span className="truncate max-w-[60px]">{table.lockedBy}</span>

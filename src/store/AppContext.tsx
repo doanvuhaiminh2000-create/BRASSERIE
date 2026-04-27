@@ -40,16 +40,22 @@ interface AppContextType extends AppState {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [isReady, setIsReady] = useState(false);
+  const [isTablesLoaded, setIsTablesLoaded] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [users] = useState<User[]>(mockUsers);
   
   const [tables, setTables] = useState<Table[]>([]);
 
   // Dexie live queries
-  const sessions = useLiveQuery(() => db.live_sessions.toArray()) || [];
-  const menu = useLiveQuery(() => db.menu_items.toArray()) || [];
-  const posBatches = useLiveQuery(() => db.pos_batches.toArray()) || [];
+  const _sessions = useLiveQuery(() => db.live_sessions.toArray());
+  const _menu = useLiveQuery(() => db.menu_items.toArray());
+  const _posBatches = useLiveQuery(() => db.pos_batches.toArray());
+
+  const sessions = _sessions || [];
+  const menu = _menu || [];
+  const posBatches = _posBatches || [];
+
+  const isReady = isTablesLoaded && _sessions !== undefined && _menu !== undefined && _posBatches !== undefined;
 
   const posAggregateByPosCode = useMemo(() => {
     const map = new Map();
@@ -88,7 +94,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setTables(defaultTables);
         await dataStore.setSetting('brasserie_tables', defaultTables);
       }
-      setIsReady(true);
+      setIsTablesLoaded(true);
     };
     initApp();
   }, []);
@@ -119,35 +125,45 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // Session Management
   const createSession = async (tableId: number, guestCount: number) => {
-    const newSession: OrderSession = {
-      id: `session_${Date.now()}`,
-      tableId,
-      guestCount,
-      status: 'ACTIVE',
-      openedAt: Date.now(),
-      openedByStaffId: currentUser?.id || 'UNKNOWN',
-      items: [],
-      upsellAttempts: [],
-      currentRound: 1,
-      eventLogs: [
-        {
-          id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-          time: Date.now(),
-          staffId: currentUser?.id || 'UNKNOWN',
-          staffName: currentUser?.name || 'UNKNOWN',
-          action: 'OPEN_TABLE',
-          details: `Mở bàn cho ${guestCount} khách`
-        }
-      ]
-    };
-    
-    await dataStore.addSession(newSession);
-    updateTable(tableId, { status: 'DA_NGOI', currentSessionId: newSession.id });
-    return newSession;
+    try {
+      const newSession: OrderSession = {
+        id: `session_${Date.now()}`,
+        tableId,
+        guestCount,
+        status: 'ACTIVE',
+        openedAt: Date.now(),
+        openedByStaffId: currentUser?.id || 'UNKNOWN',
+        items: [],
+        upsellAttempts: [],
+        currentRound: 1,
+        eventLogs: [
+          {
+            id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+            time: Date.now(),
+            staffId: currentUser?.id || 'UNKNOWN',
+            staffName: currentUser?.name || 'UNKNOWN',
+            action: 'OPEN_TABLE',
+            details: `Mở bàn cho ${guestCount} khách`
+          }
+        ]
+      };
+      
+      await dataStore.addSession(newSession);
+      updateTable(tableId, { status: 'DA_NGOI', currentSessionId: newSession.id });
+      return newSession;
+    } catch (error) {
+      console.error(error);
+      toast.error('Có lỗi xảy ra khi tạo session.');
+    }
   };
 
   const updateSession = async (sessionId: string, updates: Partial<OrderSession>) => {
-    await dataStore.updateSession(sessionId, updates);
+    try {
+      await dataStore.updateSession(sessionId, updates);
+    } catch (error) {
+      console.error(error);
+      toast.error('Có lỗi xảy ra khi cập nhật session.');
+    }
   };
 
   const getActiveSessionByTable = (tableId: number) => {

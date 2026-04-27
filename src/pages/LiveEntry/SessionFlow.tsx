@@ -43,6 +43,25 @@ export function SessionFlow() {
     return () => clearInterval(timer);
   }, []);
 
+  // Lock management
+  React.useEffect(() => {
+    if (!table || !currentUser) return;
+    const tid = table.id;
+    // Acquire lock
+    updateTable(tid, {
+      lockedBy: currentUser.id,
+      lockedAt: Date.now()
+    });
+
+    return () => {
+      // Clear lock on unmount
+      updateTable(tid, {
+        lockedBy: null,
+        lockedAt: null
+      });
+    };
+  }, [table?.id, currentUser?.id]);
+
   if (!table) return <div className="p-10 text-center font-bold text-[var(--color-text-muted)] uppercase">Bàn không tồn tại</div>;
 
   if (!activeSession) {

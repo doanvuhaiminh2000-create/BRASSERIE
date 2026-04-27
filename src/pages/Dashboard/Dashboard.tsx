@@ -4,12 +4,14 @@ import {
   AreaChart, Area, PieChart, Pie, Cell 
 } from 'recharts';
 import { useApp } from '../../store/AppContext';
-import { formatCurrency, getMilestone } from '../../lib/utils';
+import { formatCurrency, getMilestone, cn } from '../../lib/utils';
 import { Database, TrendingUp, Users, ArrowUpRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { dataStore } from '../../services/dataStore';
 import { DashboardMetrics, posAggregator } from '../../services/posAggregator';
 import { DateRangePicker, getDateRangeStrings } from '../../components/DateRangePicker';
+import { DashboardSkeleton, SkeletonLoader } from '../../components/ui/Skeleton';
+import { EmptyState } from '../../components/ui/EmptyState';
 
 const COLORS = ['#D4A24E', '#5B9DF0', '#25b589', '#d44848', '#8a5cf5'];
 
@@ -154,6 +156,10 @@ export function Dashboard() {
     };
   }, [filteredSessions, tables, users]);
 
+  if (!isReady) {
+    return <DashboardSkeleton />;
+  }
+
   return (
     <div className="p-6 md:p-8 space-y-6 pb-20 max-w-[1600px] mx-auto">
       <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-[var(--color-border-main)] mb-6 gap-4">
@@ -180,28 +186,19 @@ export function Dashboard() {
         />
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 animate-in fade-in">
-         <KPICard title="Doanh Thu (Live)" value={formatCurrency(operationalMetrics.liveRevenue)} color="var(--color-accent-gold)" />
-         <KPICard title="Lượt Khách (Live)" value={operationalMetrics.liveCustomers.toString()} color="var(--color-accent-blue)" />
-         <KPICard title="Số Bills (Live)" value={operationalMetrics.liveBills.toString()} color="var(--color-accent-purple)" />
-         <KPICard title="AOV (Khách/Bill)" value={formatCurrency(operationalMetrics.liveAOV)} color="var(--color-accent-green)" />
-      </div>
-
       {activeTab === 'FINANCIAL' && (
-        <>
-          {isAggregating ? (
+        <div className={cn("transition-opacity duration-300", isAggregating ? "opacity-50 pointer-events-none" : "opacity-100")}>
+          {!dashboardMetrics && isAggregating ? (
             <div className="w-full h-[500px] flex items-center justify-center bg-[var(--color-bg-surface)] rounded-2xl border border-[var(--color-border-main)]">
               <span className="text-[var(--color-accent-gold)] tracking-widest uppercase font-bold animate-pulse">Đang tổng hợp dữ liệu...</span>
             </div>
-          ) : !dashboardMetrics ? (
-            <div className="w-full h-[500px] flex flex-col items-center justify-center animate-in fade-in duration-500 bg-[var(--color-bg-surface)] rounded-2xl border border-[var(--color-border-main)]">
-               <Database className="w-12 h-12 text-[var(--color-text-muted)] mb-4 opacity-50" />
-               <h2 className="text-xl font-bold text-white mb-2">Chưa Có Dữ Liệu POS TRONG KHOẢNG NÀY</h2>
-               <p className="text-[var(--color-text-muted)] text-center text-sm max-w-sm mb-6">Vui lòng tải lên báo cáo doanh thu từ máy POS trong mục Quản Lý Dữ Liệu POS.</p>
-               <button onClick={() => navigate('/pos-upload')} className="px-6 py-2 bg-[var(--color-accent-gold)] text-black font-bold rounded-lg transition-all shadow-[0_0_15px_rgba(212,162,78,0.2)] hover:scale-105 active:scale-95 uppercase tracking-widest text-sm">
-                 Đi đến trang Upload
-               </button>
-            </div>
+          ) : !dashboardMetrics && !isAggregating ? (
+            <EmptyState 
+              title="Chưa Có Dữ Liệu POS TRONG KHOẢNG NÀY"
+              description="Vui lòng tải lên báo cáo doanh thu từ máy POS trong mục Quản Lý Dữ Liệu POS."
+              actionLabel="Đi đến trang Upload"
+              onAction={() => navigate('/pos-upload')}
+            />
           ) : (
             <div className="space-y-6 animate-in fade-in">
               <div className="bg-[var(--color-accent-green)]/10 border border-[var(--color-accent-green)]/30 rounded-xl p-4 text-sm font-medium text-[var(--color-accent-green)] flex items-center gap-2">
@@ -253,7 +250,7 @@ export function Dashboard() {
               </div>
             </div>
           )}
-        </>
+        </div>
       )}
 
       {activeTab === 'OPERATIONAL' && (

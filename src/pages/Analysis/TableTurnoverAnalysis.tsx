@@ -152,7 +152,7 @@ export function TableTurnoverAnalysis() {
 
   const heatmap = useMemo(() => buildOccupancyHeatmap(batches, startMs, endMs, NUM_PHYSICAL_TABLES), [batches, startMs, endMs, NUM_PHYSICAL_TABLES]);
 
-  if (isLoading) {
+  if (batches.length === 0 && isLoading) {
     return (
       <div className="w-full h-[400px] flex items-center justify-center bg-[var(--color-bg-surface)] rounded-2xl border border-[var(--color-border-main)]">
         <span className="text-[var(--color-accent-gold)] tracking-widest uppercase font-bold animate-pulse">
@@ -162,7 +162,7 @@ export function TableTurnoverAnalysis() {
     );
   }
 
-  if (batches.length === 0) {
+  if (batches.length === 0 && !isLoading) {
     return (
       <div className="p-8 h-screen overflow-y-auto w-full">
          <div className="w-full h-[400px] flex flex-col items-center justify-center bg-[var(--color-bg-surface)] rounded-2xl border border-[var(--color-border-main)] mt-10">
@@ -180,7 +180,7 @@ export function TableTurnoverAnalysis() {
   }
 
   return (
-    <div className="p-4 md:p-8 space-y-8 h-screen overflow-y-auto pb-32">
+    <div className={cn("p-4 md:p-8 space-y-8 h-screen overflow-y-auto pb-32 transition-opacity duration-300", isLoading ? "opacity-50 pointer-events-none" : "opacity-100")}>
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
         <div>

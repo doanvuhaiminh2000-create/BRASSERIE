@@ -5,6 +5,8 @@ import { formatCurrency, cn } from '../../lib/utils';
 import { useApp } from '../../store/AppContext';
 import { DateRangePicker, getDateRangeStrings } from '../../components/DateRangePicker';
 import { useNavigate } from 'react-router-dom';
+import { AnalysisSkeleton } from '../../components/ui/Skeleton';
+import { EmptyState } from '../../components/ui/EmptyState';
 
 function DataSourceCard({ label, count, total, suffix, dateRange, isReady, actionLabel, onAction }: any) {
   return (
@@ -43,16 +45,18 @@ function Toggle({ checked, onChange, label }: any) {
 }
 
 export function MenuAnalysis() {
-  const { menu, sessions, posBatches } = useApp();
+  const { menu, sessions, posBatches, isReady } = useApp();
   const navigate = useNavigate();
 
   const [dateFilter, setDateFilter] = useState<string>('thisMonth');
   const [startDate, setStartDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
   
-  const [onlyActiveMenu, setOnlyActiveMenu] = useState(true);
+  const [onlyActiveMenu, setOnlyActiveMenu] = useState(false);
   const [activeTab, setActiveTab] = useState<'MATRIX' | 'TABLE' | 'SECTION'>('MATRIX');
   const [searchTerm, setSearchTerm] = useState('');
+  const [showTop50, setShowTop50] = useState(false);
+  const [hoveredQuadrant, setHoveredQuadrant] = useState<string | null>(null);
 
   const activeRange = useMemo(() => getDateRangeStrings(dateFilter, startDate, endDate), [dateFilter, startDate, endDate]);
 
@@ -76,8 +80,6 @@ export function MenuAnalysis() {
     for (const batch of posBatches) {
       for (const d of batch.details) {
         if (d.timeOrder < startMs || d.timeOrder > endMs) continue;
-        const cat = String(d.category || '');
-        if (!cat.includes('Food') && !cat.startsWith('1.')) continue;
         const code = String(d.productId).replace(/^S\d+P/, '').trim();
         const cur = posVolMap.get(code) || { qty: 0, revenue: 0, name: d.productName };
         cur.qty += Number(d.quantity) || 0;
@@ -177,6 +179,10 @@ export function MenuAnalysis() {
   const starsCount = withVolData.filter((m: any) => m.category === 'Star').length;
   const dogsCount = withVolData.filter((m: any) => m.category === 'Dog').length;
 
+  if (!isReady) {
+    return <div className="p-6 md:p-8 max-w-[1600px] mx-auto space-y-6"><AnalysisSkeleton /></div>;
+  }
+
   return (
     <div className="p-6 md:p-8 max-w-[1600px] mx-auto space-y-6 animate-in fade-in pb-20">
       
@@ -251,22 +257,29 @@ export function MenuAnalysis() {
 
       {activeTab === 'MATRIX' && (
         <div className="bg-[var(--color-bg-surface)] border border-[var(--color-border-main)] rounded-2xl p-6 shadow-xl animate-in fade-in zoom-in-95 duration-500">
-          <h3 className="font-bold text-white mb-6 uppercase tracking-wider text-sm">Biểu Đồ Ma Trận Lượt Bán vs Lợi Nhuận</h3>
+          <div className="flex justify-between items-center mb-6">
+             <h3 className="font-bold text-white uppercase tracking-wider text-sm">Biểu Đồ Ma Trận Lượt Bán vs Lợi Nhuận</h3>
+             <Toggle 
+               checked={showTop50}
+               onChange={setShowTop50}
+               label="Top 50% Doanh Thu"
+             />
+          </div>
           
           {totalVol === 0 ? (
              <div className="h-[400px] flex items-center justify-center text-[var(--color-text-muted)] italic">Không có dữ liệu lượt bán trong thời gian này</div>
           ) : (
             <div className="h-[500px] w-full relative">
-              <span className="absolute top-4 left-4 text-[var(--color-text-muted)] text-xs font-bold tracking-widest opacity-50 uppercase z-10 px-3 py-1 bg-[var(--color-bg-main)]/80 rounded border border-[var(--color-border-main)]">PUZZLE (Khó Bán, Lãi Cao)</span>
-              <span className="absolute top-4 right-4 text-[var(--color-accent-gold)] text-xs font-bold tracking-widest opacity-80 uppercase z-10 px-3 py-1 bg-[var(--color-bg-main)]/80 rounded border border-[var(--color-accent-gold)]/30">STAR (Dễ Bán, Lãi Cao)</span>
-              <span className="absolute bottom-12 left-4 text-[var(--color-accent-red)] text-xs font-bold tracking-widest opacity-80 uppercase z-10 px-3 py-1 bg-[var(--color-bg-main)]/80 rounded border border-[var(--color-accent-red)]/30">DOG (Khó Bán, Lãi Thấp)</span>
-              <span className="absolute bottom-12 right-4 text-[var(--color-accent-blue)] text-xs font-bold tracking-widest opacity-80 uppercase z-10 px-3 py-1 bg-[var(--color-bg-main)]/80 rounded border border-[var(--color-accent-blue)]/30">PLOW HORSE (Dễ Bán, Lãi Thấp)</span>
+              <span className={cn("absolute top-4 left-4 text-[9px] font-bold tracking-widest uppercase z-0 transition-opacity", hoveredQuadrant === 'Puzzle' ? "opacity-100 text-[var(--color-text-muted)]" : "opacity-30 text-[var(--color-text-muted)]")}>PUZZLE (Khó Bán, Lãi Cao)</span>
+              <span className={cn("absolute top-4 right-4 text-[9px] font-bold tracking-widest uppercase z-0 transition-opacity", hoveredQuadrant === 'Star' ? "opacity-100 text-[var(--color-accent-gold)]" : "opacity-30 text-[var(--color-accent-gold)]")}>STAR (Dễ Bán, Lãi Cao)</span>
+              <span className={cn("absolute bottom-12 left-4 text-[9px] font-bold tracking-widest uppercase z-0 transition-opacity", hoveredQuadrant === 'Dog' ? "opacity-100 text-[var(--color-accent-red)]" : "opacity-30 text-[var(--color-accent-red)]")}>DOG (Khó Bán, Lãi Thấp)</span>
+              <span className={cn("absolute bottom-12 right-4 text-[9px] font-bold tracking-widest uppercase z-0 transition-opacity", hoveredQuadrant === 'PlowHorse' ? "opacity-100 text-[var(--color-accent-blue)]" : "opacity-30 text-[var(--color-accent-blue)]")}>PLOW HORSE (Dễ Bán, Lãi Thấp)</span>
 
               <ResponsiveContainer>
                 <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-main)" />
                   <XAxis type="number" dataKey="qty" name="Lượt bán" stroke="var(--color-text-muted)" tickLine={false} axisLine={false} />
-                  <YAxis type="number" dataKey="marginPct" name="Lợi nhuận (%)" stroke="var(--color-text-muted)" tickLine={false} axisLine={false} domain={['auto', 'auto']} />
+                  <YAxis type="number" dataKey="marginPct" name="Lợi nhuận (%)" stroke="var(--color-text-muted)" tickLine={false} axisLine={false} domain={[(dataMin: number) => Math.min(0, Math.floor(dataMin - 10)), (dataMax: number) => Math.max(100, Math.ceil(dataMax + 10))]} />
                   
                   <Tooltip 
                     cursor={{ strokeDasharray: '3 3' }} 
@@ -297,9 +310,17 @@ export function MenuAnalysis() {
                   />
                   <ReferenceLine x={globalMedQty} stroke="var(--color-text-muted)" strokeDasharray="3 3" />
                   <ReferenceLine y={globalMedMargin} stroke="var(--color-text-muted)" strokeDasharray="3 3" />
-                  <Scatter data={menuMatrix}>
-                    {menuMatrix.map((entry: any, index: number) => (
-                      <Cell key={`cell-${index}`} fill={getCategoryColor(entry.category)} />
+                  <Scatter 
+                    data={showTop50 ? [...menuMatrix].sort((a,b) => b.revenue - a.revenue).slice(0, Math.ceil(menuMatrix.length / 2)) : menuMatrix}
+                    onMouseEnter={(data) => setHoveredQuadrant(data.category)}
+                    onMouseLeave={() => setHoveredQuadrant(null)}
+                  >
+                    {(showTop50 ? [...menuMatrix].sort((a,b) => b.revenue - a.revenue).slice(0, Math.ceil(menuMatrix.length / 2)) : menuMatrix).map((entry: any, index: number) => (
+                      <Cell 
+                        key={`cell-${index}`} 
+                        fill={getCategoryColor(entry.category)}
+                        opacity={hoveredQuadrant && hoveredQuadrant !== entry.category ? 0.1 : 1}
+                      />
                     ))}
                   </Scatter>
                 </ScatterChart>

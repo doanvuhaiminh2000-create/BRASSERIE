@@ -6,6 +6,8 @@ import { useApp } from '../../store/AppContext';
 import { dataStore } from '../../services/dataStore';
 import { POSBatch } from '../../types/store';
 
+import { confirmModal } from '../../components/ui/ConfirmModal';
+
 export function POSUpload() {
   const [dragActive, setDragActive] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
@@ -69,7 +71,13 @@ export function POSUpload() {
       });
 
       if (isOverlap) {
-        if (!window.confirm("Khoảng thời gian này bị trùng lấn với lô dữ liệu đã có. Bạn có chắc muốn tiếp tục tải lên? Dữ liệu tính toán có thể bị gấp đôi nếu bạn không xóa lô cũ.")) {
+        const ok = await confirmModal({
+          title: 'Cảnh báo trùng lặp',
+          message: 'Khoảng thời gian này bị trùng lấn với lô dữ liệu đã có. Bạn có chắc muốn tiếp tục tải lên? Dữ liệu tính toán có thể bị gấp đôi nếu bạn không xóa lô cũ.',
+          confirmText: 'TIẾP TỤC TẢI LÊN',
+          danger: true
+        });
+        if (!ok) {
           setUploadStatus('idle');
           return;
         }
@@ -105,7 +113,13 @@ export function POSUpload() {
   };
 
   const handleDeleteBatch = async (batchId: string) => {
-    if (window.confirm("Bạn có chắc chắn muốn xóa dữ liệu này? Hành động này không thể hoàn tác.")) {
+    const ok = await confirmModal({
+      title: 'Xóa dữ liệu POS',
+      message: 'Bạn có chắc chắn muốn xóa dữ liệu này? Hành động này không thể hoàn tác.',
+      confirmText: 'XÓA POS',
+      danger: true
+    });
+    if (ok) {
       await dataStore.deletePOSBatch(batchId);
       loadBatches();
     }
