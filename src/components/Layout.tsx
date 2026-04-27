@@ -21,7 +21,7 @@ export function Layout() {
   // If Manager/Admin on Desktop, they see both Sidebar + Entry.
   // If Manager/Admin on Mobile/Tablet, hide sidebar for Live Entry focus.
   const isManager = currentUser?.role === 'admin' || currentUser?.role === 'manager';
-  const hideSidebar = currentUser?.role === 'staff' || (isLiveEntry && !isDesktop);
+  const hideSidebar = currentUser?.role === 'staff';
 
   const navGroups = [
     {
@@ -127,7 +127,7 @@ export function Layout() {
       {/* Main Content Area */}
       <main className={cn(
         "flex-1 flex flex-col h-full overflow-hidden relative",
-        isLiveEntry && !isDesktop && "max-w-md mx-auto shadow-2xl"
+        isLiveEntry && !isDesktop && currentUser?.role === 'staff' && "max-w-md mx-auto shadow-2xl"
       )}>
         {/* Header - shown mainly for Staff view or quick info */}
         {currentUser?.role === 'staff' && (

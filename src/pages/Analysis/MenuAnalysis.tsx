@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from 'react';
-import { ScatterChart, Scatter, XAxis, YAxis, ZAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, ReferenceLine, BarChart, Bar, Legend, PieChart, Pie } from 'recharts';
+import { ScatterChart, Scatter, XAxis, YAxis, ZAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, ReferenceLine, ReferenceArea, BarChart, Bar, Legend, PieChart, Pie } from 'recharts';
 import { Star, DollarSign, TrendingUp, AlertTriangle, ArrowRight, Search, Layers, Database } from 'lucide-react';
 import { formatCurrency, cn, normalizePosCode } from '../../lib/utils';
 import { useApp } from '../../store/AppContext';
-import { DateRangePicker, getDateRangeStrings } from '../../components/DateRangePicker';
+import { DateRangePicker } from '../../components/DateRangePicker';
 import { useNavigate } from 'react-router-dom';
 import { AnalysisSkeleton } from '../../components/ui/Skeleton';
 import { EmptyState } from '../../components/ui/EmptyState';
@@ -48,7 +48,6 @@ export function MenuAnalysis() {
   const { menu, posBatches, isReady } = useApp();
   const navigate = useNavigate();
 
-  const [dateFilter, setDateFilter] = useState<string>('thisMonth');
   const [startDate, setStartDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
   
@@ -59,7 +58,7 @@ export function MenuAnalysis() {
   const [selectedSection, setSelectedSection] = useState<string>('ALL');
   const [hoveredQuadrant, setHoveredQuadrant] = useState<string | null>(null);
 
-  const activeRange = useMemo(() => getDateRangeStrings(dateFilter, startDate, endDate), [dateFilter, startDate, endDate]);
+  const activeRange = useMemo(() => ({ start: startDate, end: endDate }), [startDate, endDate]);
 
   const posDateRange = useMemo(() => {
     if (!posBatches.length) return null;
@@ -76,11 +75,23 @@ export function MenuAnalysis() {
     const startMs = new Date(activeRange.start).setHours(0,0,0,0);
     const endMs = new Date(activeRange.end).setHours(23,59,59,999);
 
-    // 1. Volume từ POS
+    // 1. Lọc giao dịch hợp lệ
+    const validTxs = new Set<number>();
+    for (const batch of posBatches) {
+      for (const sum of batch.summary) {
+        if (sum.timeStart >= startMs && sum.timeStart <= endMs) {
+          validTxs.add(sum.transaction);
+        }
+      }
+    }
+
+    // 2. Volume từ POS
     const posVolMap = new Map<string, { qty: number; revenue: number; name: string }>();
     for (const batch of posBatches) {
       for (const d of batch.details) {
         if (d.timeOrder < startMs || d.timeOrder > endMs) continue;
+        if (!validTxs.has(d.transaction)) continue;
+
         const code = normalizePosCode(d.productId);
         const cur = posVolMap.get(code) || { qty: 0, revenue: 0, name: d.productName };
         cur.qty += Number(d.quantity) || 0;
@@ -89,7 +100,7 @@ export function MenuAnalysis() {
       }
     }
 
-    // 2. Build dataset
+    // 3. Build dataset
     const menuPosCodes = new Set(menu.map(m => m.posCode));
     let baseMenu: any[] = onlyActiveMenu ? menu.filter(m => m.isActive) : [...menu];
 
@@ -184,7 +195,6 @@ export function MenuAnalysis() {
         </div>
         
         <DateRangePicker 
-          dateFilter={dateFilter} setDateFilter={setDateFilter}
           startDate={startDate} setStartDate={setStartDate}
           endDate={endDate} setEndDate={setEndDate}
         />
@@ -246,7 +256,11 @@ export function MenuAnalysis() {
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
         <StatCard title="Tổng Món Phát Sinh" value={withVolData.length} icon={Layers} color="white" />
-        <StatCard title="Nguồn Doanh Thu" value={formatCurrency(totalRev)} icon={Database} color="var(--color-accent-green)" />
+        <div className="bg-[var(--color-bg-surface)] rounded-2xl border border-[var(--color-border-main)] p-6 relative overflow-hidden group">
+           <div className="absolute top-0 right-0 p-4 opacity-10 text-[var(--color-accent-green)] transition-transform duration-500 group-hover:scale-110"><Database size={64}/></div>
+           <h3 className="text-xs font-bold text-[var(--color-text-muted)] uppercase tracking-widest mb-1 relative z-10 flex flex-col">Nguồn Doanh Thu <span className="text-[9px] normal-case opacity-70">(Trước CK)</span></h3>
+           <p className="text-2xl font-black text-white tracking-tight relative z-10">{formatCurrency(totalRev)}</p>
+        </div>
         <StatCard title="Món Chưa Có Cost" value={menuMatrix.filter((m: any) => !m.hasRecipeCost && m.qty > 0).length} icon={AlertTriangle} color="var(--color-accent-orange)" />
         <StatCard title="Số Món Lãi + Bán Chạy" value={starsCount} icon={Star} color="var(--color-accent-gold)" />
         <StatCard title="Cần Review (Dog)" value={dogsCount} icon={AlertTriangle} color="var(--color-accent-red)" />
@@ -282,6 +296,23 @@ export function MenuAnalysis() {
           marginPctJittered: m.marginPct !== null ? m.marginPct + (idx % 3 === 0 ? 0.3 : -0.3) : null
         }));
 
+        const maxQty = Math.max(...jitteredMatrix.map((d: any) => d.qtyJittered), globalMedQty + 1);
+        const minQty = Math.max(0, Math.min(...jitteredMatrix.map((d: any) => d.qtyJittered)));
+        const maxMargin = Math.max(...jitteredMatrix.map((d: any) => d.marginPctJittered || 0), globalMedMargin + 1);
+        const minMargin = Math.min(...jitteredMatrix.map((d: any) => d.marginPctJittered || 0), globalMedMargin - 1);
+
+        const deltaQty = Math.max(Math.abs(maxQty - globalMedQty), Math.abs(globalMedQty - minQty)) * 1.1; // 10% padding
+        const deltaMargin = Math.max(Math.abs(maxMargin - globalMedMargin), Math.abs(globalMedMargin - minMargin)) * 1.1;
+
+        const domainQty = [
+          (dataMin: number) => Math.max(0, globalMedQty - deltaQty),
+          (dataMax: number) => globalMedQty + deltaQty
+        ];
+        const domainMargin = [
+          (dataMin: number) => globalMedMargin - deltaMargin,
+          (dataMax: number) => globalMedMargin + deltaMargin
+        ];
+
         return (
         <div className="bg-[var(--color-bg-surface)] border border-[var(--color-border-main)] rounded-2xl p-6 shadow-xl animate-in fade-in zoom-in-95 duration-500">
           <div className="flex justify-between items-center mb-6">
@@ -306,46 +337,20 @@ export function MenuAnalysis() {
           {totalVol === 0 ? (
              <div className="h-[400px] flex items-center justify-center text-[var(--color-text-muted)] italic">Không có dữ liệu lượt bán trong thời gian này</div>
           ) : (
-            <div className="h-[600px] w-full relative">
-              <div className="absolute inset-0 pointer-events-none grid grid-cols-2 grid-rows-2 z-0 rounded-xl overflow-hidden">
-                <div className="bg-gradient-to-br from-purple-500/5 to-transparent border-r border-b border-dashed border-white/10 flex items-start justify-start p-4">
-                  <div>
-                    <div className="text-xs font-black text-purple-400/70 uppercase tracking-widest">PUZZLE</div>
-                    <div className="text-[10px] text-white/30 mt-0.5">Lãi cao · Bán chậm</div>
-                    <div className="text-[10px] text-white/30">→ Cải thiện marketing</div>
-                  </div>
-                </div>
-                <div className="bg-gradient-to-bl from-yellow-500/10 to-transparent border-b border-dashed border-white/10 flex items-start justify-end p-4">
-                  <div className="text-right">
-                    <div className="text-xs font-black text-yellow-400/70 uppercase tracking-widest">⭐ STAR</div>
-                    <div className="text-[10px] text-white/30 mt-0.5">Lãi cao · Bán chạy</div>
-                    <div className="text-[10px] text-white/30">→ Đẩy mạnh upsell</div>
-                  </div>
-                </div>
-                <div className="bg-gradient-to-tr from-red-500/5 to-transparent border-r border-dashed border-white/10 flex items-end justify-start p-4">
-                  <div>
-                    <div className="text-xs font-black text-red-400/70 uppercase tracking-widest">🐕 DOG</div>
-                    <div className="text-[10px] text-white/30 mt-0.5">Lãi thấp · Bán chậm</div>
-                    <div className="text-[10px] text-white/30">→ Loại bỏ / làm lại</div>
-                  </div>
-                </div>
-                <div className="bg-gradient-to-tl from-blue-500/5 to-transparent flex items-end justify-end p-4">
-                  <div className="text-right">
-                    <div className="text-xs font-black text-blue-400/70 uppercase tracking-widest">🐎 PLOW HORSE</div>
-                    <div className="text-[10px] text-white/30 mt-0.5">Lãi thấp · Bán chạy</div>
-                    <div className="text-[10px] text-white/30">→ Tối ưu cost</div>
-                  </div>
-                </div>
-              </div>
-
+            <div className="h-[700px] w-full relative">
               <div className="relative z-10 h-full">
                 <ResponsiveContainer>
-                  <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-main)" />
-                    <XAxis type="number" dataKey="qtyJittered" name="Lượt bán/Ngày" stroke="var(--color-text-muted)" tickLine={false} axisLine={false} />
-                    <YAxis type="number" dataKey="marginPctJittered" name="Lợi nhuận (%)" stroke="var(--color-text-muted)" tickLine={false} axisLine={false} domain={[(dataMin: number) => Math.min(0, Math.floor(dataMin - 10)), (dataMax: number) => Math.max(100, Math.ceil(dataMax + 10))]} />
-                    <ZAxis type="number" dataKey="revenue" range={[40, 400]} />
+                  <ScatterChart margin={{ top: 20, right: 30, bottom: 20, left: 30 }}>
+                    <XAxis type="number" dataKey="marginPctJittered" name="Lợi nhuận (%)" stroke="var(--color-text-muted)" tickLine={false} axisLine={false} domain={domainMargin} />
+                    <YAxis type="number" dataKey="qtyJittered" name="Lượt bán / Ngày" stroke="var(--color-text-muted)" tickLine={false} axisLine={false} domain={domainQty} />
+                    <ZAxis type="number" dataKey="revenue" range={[80, 800]} />
                     
+                    {/* Background Quadrants */}
+                    <ReferenceArea x1={-9999} x2={globalMedMargin} y1={globalMedQty} y2={99999} fill="var(--color-accent-blue)" fillOpacity={0.08} /> {/* Plow Horse */}
+                    <ReferenceArea x1={globalMedMargin} x2={99999} y1={globalMedQty} y2={99999} fill="var(--color-accent-gold)" fillOpacity={0.08} /> {/* Star */}
+                    <ReferenceArea x1={-9999} x2={globalMedMargin} y1={-9999} y2={globalMedQty} fill="var(--color-accent-red)" fillOpacity={0.08} /> {/* Dog */}
+                    <ReferenceArea x1={globalMedMargin} x2={99999} y1={-9999} y2={globalMedQty} fill="var(--color-accent-purple)" fillOpacity={0.08} /> {/* Puzzle */}
+
                     <Tooltip 
                       cursor={{ strokeDasharray: '3 3' }} 
                       contentStyle={{ backgroundColor: 'var(--color-bg-main)', borderColor: 'var(--color-border-main)', borderRadius: '12px', color: '#fff', boxShadow: '0 10px 25px rgba(0,0,0,0.5)' }}
@@ -353,7 +358,7 @@ export function MenuAnalysis() {
                         if (active && payload && payload.length) {
                           const data = payload[0].payload;
                           return (
-                            <div className="bg-[var(--color-bg-main)] border border-[var(--color-border-main)] p-4 rounded-xl shadow-2xl min-w-[250px]">
+                            <div className="bg-[var(--color-bg-main)] border border-[var(--color-border-main)] p-4 rounded-xl shadow-2xl min-w-[250px] pointer-events-none">
                               <p className="font-bold text-white mb-1 leading-tight">{data.displayNameEN}</p>
                               <div className="flex items-center gap-2 mb-3">
                                 <span className="text-[10px] bg-white/10 px-2 py-0.5 rounded text-[var(--color-text-muted)] font-mono">{data.posCode}</span>
@@ -374,35 +379,40 @@ export function MenuAnalysis() {
                         return null;
                       }}
                     />
-                    <ReferenceLine x={globalMedQty} stroke="var(--color-text-muted)" strokeDasharray="3 3" />
-                    <ReferenceLine y={globalMedMargin} stroke="var(--color-text-muted)" strokeDasharray="3 3" />
+                    <ReferenceLine y={globalMedQty} stroke="rgba(255,255,255,0.2)" strokeDasharray="3 3" />
+                    <ReferenceLine x={globalMedMargin} stroke="rgba(255,255,255,0.2)" strokeDasharray="3 3" />
                     <Scatter 
                       data={jitteredMatrix}
                       onMouseEnter={(data) => setHoveredQuadrant(data.category)}
                       onMouseLeave={() => setHoveredQuadrant(null)}
                       shape={(props: any) => {
-                        const { cx, cy, payload, fill } = props;
+                        const { cx, cy, payload } = props;
                         const isTop = topLabeledItems.has(payload.posCode);
+                        const r = Math.max(8, Math.min(24, Math.sqrt(payload.revenue / 50000)));
+                        const cColor = getCategoryColor(payload.category);
+                        const isHovered = hoveredQuadrant === payload.category;
+                        const isFaded = hoveredQuadrant && !isHovered;
+                        
                         return (
-                          <g>
+                          <g style={{ cursor: 'pointer', transition: 'all 0.3s ease' }}>
                             <circle 
                               cx={cx} 
                               cy={cy} 
-                              r={Math.max(6, Math.min(20, Math.sqrt(payload.revenue / 100000)))} 
-                              fill={fill}
-                              fillOpacity={hoveredQuadrant && hoveredQuadrant !== payload.category ? 0.15 : 0.7}
+                              r={r} 
+                              fill={cColor}
+                              fillOpacity={isFaded ? 0.1 : 0.8}
                               stroke="var(--color-bg-surface)"
-                              strokeWidth={1.5}
+                              strokeWidth={2}
                             />
-                            {isTop && (
+                            {isTop && !isFaded && (
                               <text 
                                 x={cx} 
-                                y={cy - Math.max(6, Math.min(20, Math.sqrt(payload.revenue / 100000))) - 4} 
+                                y={cy - r - 6} 
                                 textAnchor="middle" 
                                 fill="white" 
-                                fontSize="10" 
+                                fontSize="11" 
                                 fontWeight="bold"
-                                style={{ paintOrder: 'stroke', stroke: 'rgba(0,0,0,0.8)', strokeWidth: 3 }}
+                                style={{ paintOrder: 'stroke', stroke: 'rgba(0,0,0,0.85)', strokeWidth: 4, transformOrigin: `${cx}px ${cy}px`, transition: 'all 0.2s' }}
                               >
                                 {payload.displayNameEN.length > 18 ? payload.displayNameEN.substring(0, 16) + '…' : payload.displayNameEN}
                               </text>
@@ -413,6 +423,30 @@ export function MenuAnalysis() {
                     />
                   </ScatterChart>
                 </ResponsiveContainer>
+              </div>
+              
+              {/* Fake quadrant labels on top */}
+              <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-8 z-20">
+                <div className="flex justify-between items-start h-1/2 mt-10 mx-10">
+                   <div>
+                     <div className="text-sm font-black text-blue-400/80 uppercase tracking-widest drop-shadow-md">🐎 PLOW HORSE</div>
+                     <div className="text-xs text-white/50 mt-1">Lãi thấp · Bán chạy</div>
+                   </div>
+                   <div className="text-right">
+                     <div className="text-sm font-black text-yellow-400/80 uppercase tracking-widest drop-shadow-md">⭐ STAR</div>
+                     <div className="text-xs text-white/50 mt-1">Lãi cao · Bán chạy</div>
+                   </div>
+                </div>
+                <div className="flex justify-between items-end h-1/2 mb-10 mx-10">
+                   <div>
+                     <div className="text-sm font-black text-red-400/80 uppercase tracking-widest drop-shadow-md">🐕 DOG</div>
+                     <div className="text-xs text-white/50 mt-1">Lãi thấp · Bán chậm</div>
+                   </div>
+                   <div className="text-right">
+                     <div className="text-sm font-black text-purple-400/80 uppercase tracking-widest drop-shadow-md">🧩 PUZZLE</div>
+                     <div className="text-xs text-white/50 mt-1">Lãi cao · Bán chậm</div>
+                   </div>
+                </div>
               </div>
             </div>
           )}

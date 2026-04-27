@@ -3,15 +3,14 @@ import { useApp } from '../../store/AppContext';
 import { cn, getMilestone, isDateInRange } from '../../lib/utils';
 import { Download, FileSpreadsheet } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { DateRangePicker, getDateRangeStrings } from '../../components/DateRangePicker';
+import { DateRangePicker } from '../../components/DateRangePicker';
 
 export function SessionHistory() {
   const { sessions, tables, users, menu } = useApp();
-  const [dateFilter, setDateFilter] = useState<string>('today');
   const [startDate, setStartDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
-  const activeRange = useMemo(() => getDateRangeStrings(dateFilter, startDate, endDate), [dateFilter, startDate, endDate]);
+  const activeRange = useMemo(() => ({ start: startDate, end: endDate }), [startDate, endDate]);
 
   const completedSessions = sessions.filter(s => {
     if (s.status !== 'COMPLETED') return false;
@@ -179,10 +178,7 @@ export function SessionHistory() {
     wsAudit['!cols'] = [{ wch: 15 }, { wch: 10 }, { wch: 20 }, { wch: 15 }, { wch: 20 }, { wch: 20 }, { wch: 40 }];
     XLSX.utils.book_append_sheet(workbook, wsAudit, "Audit Trail");
 
-    let filename = `Bao_Cao_Van_Hanh_Live_${formatDateExcel(Date.now()).replace(/[\/:]/g, '_')}`;
-    if (dateFilter === 'custom') {
-      filename = `Bao_Cao_Van_Hanh_Live_${startDate}_to_${endDate}`;
-    }
+    let filename = `Bao_Cao_Van_Hanh_Live_${startDate}_to_${endDate}`;
 
     XLSX.writeFile(workbook, `${filename}.xlsx`);
   };
@@ -202,7 +198,6 @@ export function SessionHistory() {
 
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center w-full md:w-auto">
           <DateRangePicker 
-            dateFilter={dateFilter} setDateFilter={setDateFilter}
             startDate={startDate} setStartDate={setStartDate}
             endDate={endDate} setEndDate={setEndDate}
           />

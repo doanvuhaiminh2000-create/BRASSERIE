@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { DateRangePicker, getDateRangeStrings } from '../../components/DateRangePicker';
+import { DateRangePicker } from '../../components/DateRangePicker';
 import { useApp } from '../../store/AppContext';
 import { dataStore } from '../../services/dataStore';
 import { POSBatch } from '../../types/store';
@@ -40,7 +40,6 @@ function KPICard({ title, value, subtitle, color, source }: { title: string; val
 export function ServiceTimeAnalysis() {
   const { sessions, isReady } = useApp();
   const navigate = useNavigate();
-  const [dateFilter, setDateFilter] = useState<string>('thisMonth');
   const [startDate, setStartDate] = useState<string>(
     new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]
   );
@@ -51,8 +50,8 @@ export function ServiceTimeAnalysis() {
   const [isLoading, setIsLoading] = useState(false);
 
   const activeRange = useMemo(
-    () => getDateRangeStrings(dateFilter, startDate, endDate),
-    [dateFilter, startDate, endDate]
+    () => ({ start: startDate, end: endDate }),
+    [startDate, endDate]
   );
   
   const startMs = new Date(activeRange.start).getTime();
@@ -188,8 +187,6 @@ export function ServiceTimeAnalysis() {
           <p className="text-sm text-[var(--color-text-muted)] mt-1">Phân tích phễu thời gian từng giai đoạn của bill: mở bàn → order → ra món → thanh toán</p>
         </div>
         <DateRangePicker 
-          dateFilter={dateFilter} 
-          setDateFilter={setDateFilter} 
           startDate={startDate} 
           setStartDate={setStartDate} 
           endDate={endDate} 

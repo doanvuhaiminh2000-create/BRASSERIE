@@ -9,7 +9,7 @@ import { Database, TrendingUp, Users, ArrowUpRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { dataStore } from '../../services/dataStore';
 import { DashboardMetrics, posAggregator } from '../../services/posAggregator';
-import { DateRangePicker, getDateRangeStrings } from '../../components/DateRangePicker';
+import { DateRangePicker } from '../../components/DateRangePicker';
 import { DashboardSkeleton, SkeletonLoader } from '../../components/ui/Skeleton';
 import { EmptyState } from '../../components/ui/EmptyState';
 
@@ -20,14 +20,13 @@ export function Dashboard() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'FINANCIAL' | 'OPERATIONAL'>('FINANCIAL');
   
-  const [dateFilter, setDateFilter] = useState<string>('today');
   const [startDate, setStartDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
   
   const [dashboardMetrics, setDashboardMetrics] = useState<any>(null);
   const [isAggregating, setIsAggregating] = useState(false);
 
-  const activeDateRange = useMemo(() => getDateRangeStrings(dateFilter, startDate, endDate), [dateFilter, startDate, endDate]);
+  const activeDateRange = useMemo(() => ({ start: startDate, end: endDate }), [startDate, endDate]);
 
   useEffect(() => {
     if (!isReady) return;
@@ -180,7 +179,6 @@ export function Dashboard() {
         </div>
         
         <DateRangePicker 
-          dateFilter={dateFilter} setDateFilter={setDateFilter}
           startDate={startDate} setStartDate={setStartDate}
           endDate={endDate} setEndDate={setEndDate}
         />
