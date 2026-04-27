@@ -77,8 +77,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // Strip S3P prefix if any
         const cleanCode = normalizePosCode(detail.productId);
         const cat = String(detail.category || '');
-        // ONLY count items in menu
-        if (!menuPosCodes.has(cleanCode)) continue;
         
         if (!map.has(cleanCode)) {
           map.set(cleanCode, {

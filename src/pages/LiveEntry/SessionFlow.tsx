@@ -31,8 +31,6 @@ export function SessionFlow() {
   // Right column modals/state
   const [upsellTargetItem, setUpsellTargetItem] = useState<any | null>(null);
   const [upsellRejectReason, setUpsellRejectReason] = useState<string>('Ăn không hết');
-  const [cancelModalItem, setCancelModalItem] = useState<SessionItem | null>(null);
-  const [cancelReason, setCancelReason] = useState('Khách đổi ý');
   const [isCheckoutMode, setIsCheckoutMode] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'Tiền Mặt' | 'Thẻ NCB' | 'VietQR' | 'Voucher' | null>(null);
   
@@ -66,7 +64,7 @@ export function SessionFlow() {
 
   if (!activeSession) {
     return (
-      <div className="flex flex-col h-full bg-[var(--color-bg-main)] relative">
+      <div className="flex flex-col h-full bg-[var(--color-bg-main)] relative min-h-0">
         <div className="flex-none flex items-center justify-between p-4 bg-[var(--color-bg-surface)] border-b border-[var(--color-border-main)]">
            <span className="text-xs font-black text-white uppercase">Mở Bàn {table.name}</span>
            <button onClick={() => navigate('/live-entry')} className="text-[10px] font-black text-[var(--color-text-muted)] hover:text-white flex items-center gap-1 uppercase">
@@ -126,7 +124,7 @@ export function SessionFlow() {
   const grandTotal = calculateTotal([...pendingItems, ...sentItems, ...servedItems]);
 
   return (
-    <div className="flex flex-col h-full bg-[var(--color-bg-main)] overflow-hidden">
+    <div className="flex flex-col h-full bg-[var(--color-bg-main)] overflow-hidden min-h-0">
       {/* 1. ĐẦU MỤC QUAN TRỌNG */}
       <div className="flex-none flex flex-col pb-2 bg-[var(--color-bg-surface)] border-b border-[var(--color-border-main)]">
         {/* Table info & Exit for mobile */}
@@ -141,16 +139,16 @@ export function SessionFlow() {
         </div>
 
         {/* Stages */}
-        <div className="flex px-3 pt-2 gap-1 shrink-0">
+        <div className="flex px-3 pt-1 gap-1 shrink-0">
           {['ORDER', 'UPSELL', 'REVIEW'].map((s, idx) => (
-            <div key={s} className={cn("flex-1 py-1.5 rounded-lg text-[10px] font-black text-center transition-all border", hubStage === s ? "bg-[var(--color-accent-gold)] text-black border-[var(--color-accent-gold)]" : "text-[var(--color-text-muted)] border-transparent bg-[var(--color-bg-main)]/50")}>
+            <div key={s} className={cn("flex-1 py-1 rounded-lg text-[10px] font-black text-center transition-all border", hubStage === s ? "bg-[var(--color-accent-gold)] text-black border-[var(--color-accent-gold)]" : "text-[var(--color-text-muted)] border-transparent bg-[var(--color-bg-main)]/50")}>
               {idx + 1}. {s === 'ORDER' ? 'GỌI MÓN' : s === 'UPSELL' ? 'UPSELL' : 'XÁC NHẬN'}
             </div>
           ))}
         </div>
 
         {/* Sections */}
-        <div className="flex overflow-x-auto gap-2 px-3 pt-3 custom-scrollbar pb-1 shrink-0">
+        <div className="flex overflow-x-auto gap-2 px-3 pt-2 pb-2 custom-scrollbar shrink-0 xl:hidden">
           {sections.map(sec => (
             <button key={sec} onClick={() => setSelectedSection(sec)} className={cn("px-4 py-1.5 rounded-full font-bold text-[11px] uppercase transition-all whitespace-nowrap border text-white", selectedSection === sec ? "bg-[var(--color-accent-gold)] text-black border-[var(--color-accent-gold)]" : "bg-[var(--color-bg-main)] text-[var(--color-text-muted)] hover:text-white border-[var(--color-border-main)]")}>
               {sec}
@@ -174,7 +172,7 @@ export function SessionFlow() {
       ) : (
         <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden">
           {/* DESKTOP ONLY: Vertical section sidebar */}
-          <aside className="hidden xl:flex flex-col w-44 border-r border-[var(--color-border-main)] bg-[var(--color-bg-surface)]/50 overflow-y-auto custom-scrollbar shrink-0">
+          <aside className="hidden xl:flex flex-col w-44 border-r border-[var(--color-border-main)] bg-[var(--color-bg-surface)]/50 overflow-y-auto custom-scrollbar shrink-0 min-h-0">
             <h3 className="text-[10px] uppercase tracking-widest text-[var(--color-text-muted)] font-black p-4 border-b border-[var(--color-border-main)]">Danh mục</h3>
             {sections.map(sec => (
               <button 
@@ -196,7 +194,7 @@ export function SessionFlow() {
             {/* 2. MENU */}
             <div className={cn(
               "p-3 bg-[var(--color-bg-main)]/30 custom-scrollbar border-b border-[var(--color-border-main)] overscroll-x-contain",
-              "flex-[2] min-h-[160px] md:flex-1 md:overflow-y-auto overflow-x-auto"
+              "flex-[5] min-h-0 md:flex-1 md:overflow-y-auto overflow-x-auto"
             )}>
               <div className={cn(
                 "flex gap-3 h-full pb-2", // Mobile/Tablet side scroll
@@ -215,7 +213,7 @@ export function SessionFlow() {
             </div>
 
             {/* 3. ORDER LIST (Mobile view - merged into sidebar on PC/Tablet?) */}
-            <div className="md:hidden flex-[3] min-h-[0px] overflow-y-auto p-3 bg-[var(--color-bg-surface)] custom-scrollbar">
+            <div className="md:hidden flex-[6] min-h-0 overflow-y-auto p-3 bg-[var(--color-bg-surface)] custom-scrollbar">
               {pendingItems.length === 0 && sentItems.length === 0 && servedItems.length === 0 && (
                  <div className="h-full flex items-center justify-center text-[var(--color-text-muted)] text-[10px] uppercase font-bold tracking-widest">
                    Chưa có món nào được chọn.
@@ -237,7 +235,10 @@ export function SessionFlow() {
             </div>
 
             {/* 4. ACTIONS (Mobile footer) */}
-            <div className="md:hidden flex-none border-t border-[var(--color-border-main)] bg-[var(--color-bg-surface)] p-3 shrink-0 flex flex-col justify-end pb-safe">
+            <div 
+              className="md:hidden flex-none border-t border-[var(--color-border-main)] bg-[var(--color-bg-surface)] px-3 pt-3 shrink-0 shadow-[0_-4px_20px_rgba(0,0,0,0.3)] z-20"
+              style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)' }}
+            >
                <OrderActions 
                  pendingItems={pendingItems}
                  hubStage={hubStage}
@@ -251,13 +252,13 @@ export function SessionFlow() {
           </div>
 
           {/* TABLET/PC SIDEBAR: ORDER PANEL */}
-          <aside className="hidden md:flex flex-col w-[320px] lg:w-[380px] bg-[var(--color-bg-surface)] border-l border-[var(--color-border-main)] shrink-0 overflow-hidden">
-             <div className="p-4 border-b border-[var(--color-border-main)] bg-[var(--color-bg-main)] flex justify-between items-center">
+          <aside className="hidden md:flex flex-col w-[320px] lg:w-[380px] bg-[var(--color-bg-surface)] border-l border-[var(--color-border-main)] shrink-0 overflow-hidden min-h-0">
+             <div className="p-4 border-b border-[var(--color-border-main)] bg-[var(--color-bg-main)] flex justify-between items-center shrink-0">
                 <h3 className="text-xs font-black text-white uppercase tracking-widest">Chi tiết Order</h3>
                 <span className="text-[10px] text-[var(--color-text-muted)] font-mono">Bàn {table.name}</span>
              </div>
              
-             <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-4">
+             <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-4 min-h-0">
                 <OrderContent 
                   pendingItems={pendingItems}
                   sentItems={sentItems}
@@ -270,7 +271,7 @@ export function SessionFlow() {
                 />
              </div>
 
-             <div className="p-4 border-t border-[var(--color-border-main)] space-y-4">
+             <div className="p-4 border-t border-[var(--color-border-main)] space-y-4 shrink-0">
                 <OrderActions 
                   pendingItems={pendingItems}
                   hubStage={hubStage}
@@ -420,24 +421,24 @@ function OrderActions({ pendingItems, hubStage, setHubStage, grandTotal, setIsCh
     <div className="flex flex-col gap-3">
       <div className="flex justify-between items-center px-1">
         <span className="text-[var(--color-text-muted)] font-black uppercase text-[10px]">TỔNG CỘNG</span>
-        <span className="text-[var(--color-accent-gold)] text-lg font-black">{new Intl.NumberFormat('vi-VN').format(grandTotal)}đ</span>
+        <span className="text-[var(--color-accent-gold)] text-base font-black">{new Intl.NumberFormat('vi-VN').format(grandTotal)}đ</span>
       </div>
       
       <div className="flex gap-2 w-full">
-        {hubStage === 'ORDER' && <button onClick={() => setHubStage('UPSELL')} disabled={pendingItems.length === 0} className="flex-1 py-4 bg-[var(--color-accent-gold)] text-black font-black rounded-xl uppercase text-xs disabled:opacity-50 tracking-widest shadow-lg">TIẾP TỤC →</button>}
+        {hubStage === 'ORDER' && <button onClick={() => setHubStage('UPSELL')} disabled={pendingItems.length === 0} className="flex-1 py-3 bg-[var(--color-accent-gold)] text-black font-black rounded-xl uppercase text-xs disabled:opacity-50 tracking-widest shadow-lg">TIẾP TỤC →</button>}
         
         {hubStage === 'UPSELL' && <>
           <button onClick={() => setHubStage('ORDER')} className="px-5 bg-[var(--color-bg-main)] border border-[var(--color-border-main)] text-white font-bold rounded-xl text-[11px] uppercase">Lùi</button>
-          <button onClick={() => setHubStage('REVIEW')} className="flex-1 py-4 bg-[var(--color-accent-green)] text-black font-black rounded-xl uppercase text-xs tracking-widest shadow-lg">XONG →</button>
+          <button onClick={() => setHubStage('REVIEW')} className="flex-1 py-3 bg-[var(--color-accent-green)] text-black font-black rounded-xl uppercase text-xs tracking-widest shadow-lg">XONG →</button>
         </>}
         
         {hubStage === 'REVIEW' && <>
           <button onClick={() => setHubStage('UPSELL')} className="px-5 bg-[var(--color-bg-main)] border border-[var(--color-border-main)] text-white font-bold rounded-xl text-[11px] uppercase">Lùi</button>
-          <button onClick={handleSendToKitchen} className="flex-1 py-4 bg-[var(--color-accent-orange)] text-white font-black rounded-xl animate-pulse uppercase text-xs tracking-widest shadow-lg flex items-center justify-center gap-2"><UtensilsCrossed className="w-4 h-4"/> GỬI BẾP</button>
+          <button onClick={handleSendToKitchen} className="flex-1 py-3 bg-[var(--color-accent-orange)] text-white font-black rounded-xl animate-pulse uppercase text-xs tracking-widest shadow-lg flex items-center justify-center gap-2"><UtensilsCrossed className="w-4 h-4"/> GỬI BẾP</button>
         </>}
         
         {pendingItems.length === 0 && hubStage === 'ORDER' && grandTotal > 0 && (
-          <button onClick={() => setIsCheckoutMode(true)} disabled={sentItems.length > 0} className="flex-1 py-4 border-2 border-[var(--color-accent-green)]/30 text-[var(--color-accent-green)] font-black rounded-xl uppercase text-[11px] tracking-widest bg-[var(--color-accent-green)]/5">THANH TOÁN</button>
+          <button onClick={() => setIsCheckoutMode(true)} disabled={sentItems.length > 0} className="flex-1 py-3 border-2 border-[var(--color-accent-green)]/30 text-[var(--color-accent-green)] font-black rounded-xl uppercase text-[11px] tracking-widest bg-[var(--color-accent-green)]/5">THANH TOÁN</button>
         )}
       </div>
     </div>

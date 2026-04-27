@@ -6,9 +6,9 @@ import { TopBar } from './TopBar';
 
 export function LiveEntry() {
   return (
-    <div className="flex flex-col h-screen h-screen-safe bg-[var(--color-bg-main)]">
+    <div className="flex flex-col h-dvh bg-[var(--color-bg-main)]">
       <TopBar />
-      <div className="flex-1 overflow-hidden relative pb-safe">
+      <div className="flex-1 overflow-hidden relative min-h-0">
         <Routes>
           <Route path="/" element={<TableMap />} />
           <Route path="/table/:tableId" element={<SessionFlow />} />

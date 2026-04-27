@@ -44,7 +44,7 @@ export function TopBar() {
   };
 
   return (
-    <div className="h-14 border-b border-[var(--color-border-main)] bg-[var(--color-bg-surface)] shrink-0 flex items-center justify-between px-2 pt-safe relative z-40 shadow-sm">
+    <div className="min-h-14 border-b border-[var(--color-border-main)] bg-[var(--color-bg-surface)] shrink-0 flex items-center justify-between px-2 relative z-40 shadow-sm" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
       <div className="flex items-center gap-2">
         {isTableDetail ? (
           <button 

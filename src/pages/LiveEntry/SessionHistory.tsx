@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../store/AppContext';
-import { cn, getMilestone, isDateInRange } from '../../lib/utils';
+import { cn } from '../../lib/utils';
 import { Download, FileSpreadsheet } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { DateRangePicker } from '../../components/DateRangePicker';

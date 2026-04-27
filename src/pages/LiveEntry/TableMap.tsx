@@ -471,17 +471,12 @@ function ZoneManagerModal({ onClose }: { onClose: () => void }) {
     if (tablesInZone.length > 0) {
       const choice = await confirmModal({
         title: 'Xóa khu vực',
-        message: `Khu vực "${zone}" đang có ${tablesInZone.length} bàn. Bạn muốn làm gì?`,
-        confirmText: 'XÓA CẢ BÀN',
-        cancelText: 'CHỈ XÓA KHU VỰC (Giữ bàn)',
+        message: `Khu vực "${zone}" đang có ${tablesInZone.length} bàn. Xóa khu vực và toàn bộ bàn?`,
+        confirmText: 'XÓA TẤT CẢ',
         danger: true
       });
-      
-      // If we don't have a specific "Cancel" vs "Alternative" button in our confirmModal, 
-      // I'll assume they might want to just move them or something.
-      // But let's assume they want to delete everything if they say confirm.
-      if (choice === undefined) return; // Closed modal
-      deleteTables = choice;
+      if (!choice) return;
+      deleteTables = true;
     } else {
       if (!(await confirmModal({ title: 'Xóa khu vực', message: `Bạn có chắc muốn xóa khu vực "${zone}"?`, danger: true }))) return;
     }

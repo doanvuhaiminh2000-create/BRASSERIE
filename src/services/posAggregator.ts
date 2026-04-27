@@ -15,12 +15,12 @@ export interface DashboardMetrics {
 
 export const posAggregator = {
   aggregate(batches: POSBatch[], dateFromStr: string, dateToStr: string): DashboardMetrics {
-    const start = new Date(dateFromStr);
-    start.setHours(0,0,0,0);
+    const [y, m, d] = dateFromStr.split('-').map(Number);
+    const start = new Date(y, m - 1, d, 0, 0, 0, 0);
     const startMs = start.getTime();
     
-    const end = new Date(dateToStr);
-    end.setHours(23,59,59,999);
+    const [ey, em, ed] = dateToStr.split('-').map(Number);
+    const end = new Date(ey, em - 1, ed, 23, 59, 59, 999);
     const endMs = end.getTime();
 
     let totalRevenue = 0;

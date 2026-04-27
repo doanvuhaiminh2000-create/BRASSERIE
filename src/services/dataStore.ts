@@ -68,7 +68,8 @@ export const dataStore = {
     await db.live_sessions.clear();
   },
 
-  async saveSessions(sessions: OrderSession[]) {
+  // WARNING: This is a destructive operation. It will clear all existing sessions and replace them.
+  async replaceAllSessions(sessions: OrderSession[]) {
     await db.live_sessions.clear();
     await db.live_sessions.bulkPut(sessions);
   },
