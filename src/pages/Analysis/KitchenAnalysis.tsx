@@ -1,60 +1,134 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { ChefHat, Flame, Timer, CheckCircle, AlertTriangle } from 'lucide-react';
-
-const stationData = [
-  { station: 'Bếp Pizza (P)', avgTime: 12.5, target: 12, max: 18 },
-  { station: 'Bếp Nóng (N)', avgTime: 16.2, target: 15, max: 22 },
-  { station: 'Bếp Salad (L)', avgTime: 5.4, target: 5, max: 8 },
-  { station: 'Pha Chế (B)', avgTime: 3.1, target: 3, max: 5 },
-];
+import { ChefHat, Flame, Timer, CheckCircle, Database } from 'lucide-react';
+import { useApp } from '../../store/AppContext';
+import { DateRangePicker } from '../../components/DateRangePicker';
+import { sessionAnalytics, KitchenMetrics } from '../../services/sessionAnalytics';
 
 export function KitchenAnalysis() {
+  const { sessions, isReady } = useApp();
+  const [startDate, setStartDate] = useState<string>(new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
+
+  const activeRange = useMemo(() => ({ start: startDate, end: endDate }), [startDate, endDate]);
+
+  const filteredSessions = useMemo(() => {
+    const startMs = new Date(activeRange.start).setHours(0,0,0,0);
+    const endMs = new Date(activeRange.end).setHours(23,59,59,999);
+    return (sessions || []).filter(s => s.openedAt >= startMs && s.openedAt <= endMs);
+  }, [sessions, activeRange]);
+
+  const metrics = useMemo<KitchenMetrics>(() => {
+    return sessionAnalytics.getKitchenMetrics(filteredSessions);
+  }, [filteredSessions]);
+
+  const stationChartData = useMemo(() => {
+    return (Object.entries(metrics.stationMetrics) as [string, number][]).map(([station, avgTime]) => ({
+      station,
+      avgTime: Number((avgTime / 60000).toFixed(1)), // convert to minutes
+      target: station.includes('Pizza') ? 12 : station.includes('Salad') ? 5 : station.includes('Pha Chế') ? 3 : 15
+    })).sort((a, b) => b.avgTime - a.avgTime);
+  }, [metrics.stationMetrics]);
+
+  const overallAvg = useMemo(() => {
+    const values = Object.values(metrics.stationMetrics) as number[];
+    if (!values.length) return 0;
+    return (values.reduce((a, b) => a + b, 0) / values.length) / 60000;
+  }, [metrics.stationMetrics]);
+
+  const fastestStation = useMemo(() => {
+    const entries = Object.entries(metrics.stationMetrics) as [string, number][];
+    if (!entries.length) return "—";
+    return entries.sort((a, b) => a[1] - b[1])[0][0];
+  }, [metrics.stationMetrics]);
+
+  const slowestStation = useMemo(() => {
+    const entries = Object.entries(metrics.stationMetrics) as [string, number][];
+    if (!entries.length) return "—";
+    return entries.sort((a, b) => b[1] - a[1])[0][0];
+  }, [metrics.stationMetrics]);
+
+  if (!isReady) return null;
+
   return (
-    <div className="p-6 md:p-8 space-y-6">
-      <div className="mb-4">
-        <h2 className="text-2xl font-bold text-white tracking-tight">Hiệu Quả Bếp (Kitchen Performance)</h2>
-        <p className="text-[var(--color-text-muted)] text-sm mt-1">Phân tích tốc độ ra món theo từng Station.</p>
+    <div className="p-6 md:p-8 space-y-6 pb-20">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-4">
+        <div>
+          <h2 className="text-3xl font-bold text-white tracking-tight uppercase">Hiệu Quả Bếp (Kitchen Performance)</h2>
+          <p className="text-[var(--color-text-muted)] text-sm mt-1">Phân tích tốc độ ra món dựa trên thời điểm SEND KITCHEN và SERVE ITEM.</p>
+        </div>
+        <DateRangePicker startDate={startDate} setStartDate={setStartDate} endDate={endDate} setEndDate={setEndDate} />
       </div>
 
-      <div className="bg-amber-500/10 border-2 border-amber-500/40 rounded-xl p-4 mb-6 flex items-start gap-3">
-        <AlertTriangle className="w-6 h-6 text-amber-500 shrink-0 mt-0.5" />
-        <div>
-          <h3 className="font-black text-amber-400 uppercase tracking-wider text-sm mb-1">⚠️ Trang đang hiển thị DỮ LIỆU MẪU</h3>
-          <p className="text-amber-200/80 text-sm leading-relaxed">
-            Trang này hiện đang sử dụng dữ liệu demo để minh họa giao diện. 
-            Logic phân tích thực tế từ POS / Live Entry sẽ được kết nối trong bản cập nhật tiếp theo. 
-            Các con số dưới đây <strong>không phản ánh dữ liệu thật</strong> của nhà hàng.
-          </p>
-        </div>
+      <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-3 text-blue-400 text-sm flex items-center gap-2">
+        <Database className="w-4 h-4" />
+        Dữ liệu được tổng hợp từ các lần phục vụ món thực tế tại từng quầy (Station).
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="TB Ra Món (Overall)" value="8.5p" icon={Timer} color="var(--color-accent-blue)" />
-        <StatCard title="Station Nhanh Nhất" value="Pha Chế" icon={CheckCircle} color="var(--color-accent-green)" />
-        <StatCard title="Station Chậm Nhất" value="Bếp Nóng" icon={Flame} color="var(--color-accent-red)" />
-        <StatCard title="Khối Lượng Món" value="1,245" icon={ChefHat} color="var(--color-accent-gold)" />
+        <StatCard title="TB Ra Món (Overall)" value={`${overallAvg.toFixed(1)}p`} icon={Timer} color="var(--color-accent-blue)" />
+        <StatCard title="Station Nhanh Nhất" value={fastestStation} icon={CheckCircle} color="var(--color-accent-green)" />
+        <StatCard title="Station Chậm Nhất" value={slowestStation} icon={Flame} color="var(--color-accent-red)" />
+        <StatCard title="Món Phân Tích" value={metrics.slowestItems.length.toLocaleString()} icon={ChefHat} color="var(--color-accent-gold)" />
       </div>
 
-      <div className="bg-[var(--color-bg-surface)] border border-[var(--color-border-main)] rounded-2xl p-6">
-        <h3 className="font-semibold text-white mb-6 uppercase tracking-wider text-sm">Thời gian hoàn thành món trung bình (phút)</h3>
-        <div className="h-[350px] w-full">
-          <ResponsiveContainer>
-            <BarChart data={stationData} layout="vertical" margin={{ top: 0, right: 20, left: 20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-main)" horizontal={true} vertical={false}/>
-              <XAxis type="number" stroke="var(--color-text-muted)" fontSize={12} tickLine={false} axisLine={false} />
-              <YAxis dataKey="station" type="category" stroke="var(--color-text-muted)" fontSize={12} tickLine={false} axisLine={false} width={100} />
-              <Tooltip 
-                contentStyle={{ backgroundColor: 'var(--color-bg-main)', borderColor: 'var(--color-border-main)', borderRadius: '8px' }} 
-                cursor={{ fill: 'var(--color-border-main)', opacity: 0.2 }}
-              />
-              <Bar dataKey="avgTime" name="Thời Gian TB (phút)" radius={[0, 4, 4, 0]} maxBarSize={40}>
-                {stationData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.avgTime > entry.target ? 'var(--color-accent-red)' : 'var(--color-accent-blue)'} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="bg-[var(--color-bg-surface)] border border-[var(--color-border-main)] rounded-2xl p-6 lg:col-span-2">
+          <h3 className="font-semibold text-white mb-6 uppercase tracking-wider text-sm flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-[var(--color-accent-blue)]"></span>
+            Thời gian hoàn thành món trung bình (phút)
+          </h3>
+          <div className="h-[350px] w-full">
+            <ResponsiveContainer>
+              <BarChart data={stationChartData} layout="vertical" margin={{ top: 0, right: 30, left: 40, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-main)" horizontal={true} vertical={false}/>
+                <XAxis type="number" stroke="var(--color-text-muted)" fontSize={10} tickLine={false} axisLine={false} />
+                <YAxis dataKey="station" type="category" stroke="var(--color-text-muted)" fontSize={10} tickLine={false} axisLine={false} width={100} />
+                <Tooltip 
+                  contentStyle={{ backgroundColor: 'var(--color-bg-main)', borderColor: 'var(--color-border-main)', borderRadius: '8px' }} 
+                  cursor={{ fill: 'var(--color-border-main)', opacity: 0.1 }}
+                />
+                <Bar dataKey="avgTime" name="Thời Gian TB (phút)" radius={[0, 4, 4, 0]} maxBarSize={30}>
+                  {stationChartData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.avgTime > entry.target ? 'var(--color-accent-red)' : 'var(--color-accent-blue)'} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="mt-4 flex items-center gap-6 justify-center">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-[var(--color-accent-blue)]" />
+              <span className="text-[10px] text-[var(--color-text-muted)] uppercase font-bold">Trong mục tiêu</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-[var(--color-accent-red)]" />
+              <span className="text-[10px] text-[var(--color-text-muted)] uppercase font-bold">Vượt mục tiêu (Cần tối ưu)</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-[var(--color-bg-surface)] border border-[var(--color-border-main)] rounded-2xl p-6 flex flex-col">
+          <h3 className="font-semibold text-white mb-6 uppercase tracking-wider text-sm">
+            Top Món "Đợi Lâu"
+          </h3>
+          <div className="flex-1 space-y-4">
+            {metrics.slowestItems.length === 0 ? (
+              <div className="h-full flex items-center justify-center text-[var(--color-text-muted)] italic text-xs uppercase tracking-widest">Chưa có dữ liệu</div>
+            ) : (
+              metrics.slowestItems.map((item, idx) => (
+                <div key={idx} className="flex justify-between items-center group">
+                  <div className="flex-1 min-w-0 pr-4">
+                    <p className="text-sm font-bold text-white truncate" title={item.name}>{item.name}</p>
+                    <div className="w-full bg-white/5 h-1 rounded-full mt-1 overflow-hidden">
+                       <div className="h-full bg-[var(--color-accent-red)] rounded-full" style={{ width: `${Math.min(100, (item.avgTime / 30) * 100)}%` }} />
+                    </div>
+                  </div>
+                  <div className="text-sm font-black text-[var(--color-accent-red)] tabular-nums">{item.avgTime}p</div>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -66,14 +140,14 @@ function StatCard({ title, value, icon: Icon, color }: any) {
     <div className="bg-[var(--color-bg-surface)] rounded-2xl border border-[var(--color-border-main)] p-6 relative overflow-hidden group">
       <div className="absolute top-0 left-0 w-1 h-full" style={{ backgroundColor: color }}></div>
       <div className="flex justify-between items-start mb-4">
-        <p className="text-xs text-[var(--color-text-muted)] font-semibold uppercase tracking-widest leading-relaxed">
+        <p className="text-[10px] text-[var(--color-text-muted)] font-black uppercase tracking-widest leading-relaxed">
           {title}
         </p>
         <div className="p-2 rounded-xl bg-[var(--color-bg-main)] border border-[var(--color-border-main)]" style={{ color: color }}>
           <Icon className="w-5 h-5" />
         </div>
       </div>
-      <h4 className="text-3xl font-bold text-white tracking-tight">{value}</h4>
+      <h4 className="text-3xl font-black text-white tracking-tight">{value}</h4>
     </div>
   );
 }

@@ -261,7 +261,7 @@ export function MenuAnalysis() {
   const { menu, posBatches, isReady } = useApp();
   const navigate = useNavigate();
 
-  const [startDate, setStartDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [startDate, setStartDate] = useState<string>(new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
   
   const [onlyActiveMenu, setOnlyActiveMenu] = useState(false);

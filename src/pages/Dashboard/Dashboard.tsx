@@ -20,7 +20,7 @@ export function Dashboard() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'FINANCIAL' | 'OPERATIONAL'>('FINANCIAL');
   
-  const [startDate, setStartDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [startDate, setStartDate] = useState<string>(new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
   
   const [dashboardMetrics, setDashboardMetrics] = useState<any>(null);

@@ -85,6 +85,7 @@ export interface EventLog {
   staffName: string;
   action: string;
   details: string;
+  targetItemId?: string;
 }
 
 export interface OrderSession {

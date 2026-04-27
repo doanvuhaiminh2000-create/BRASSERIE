@@ -41,7 +41,7 @@ export function ServiceTimeAnalysis() {
   const { sessions, isReady } = useApp();
   const navigate = useNavigate();
   const [startDate, setStartDate] = useState<string>(
-    new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]
+    new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0]
   );
   const [endDate, setEndDate] = useState<string>(
     new Date().toISOString().split('T')[0]

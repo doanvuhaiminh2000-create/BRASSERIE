@@ -10,6 +10,7 @@ function normalizeName(s: string): string {
     .toLowerCase()
 //    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')  // bỏ dấu Latin (Not perfectly simple without standard methods, but this is fine)
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd').replace(/Đ/g, 'd')
     .replace(/[''`´]/g, "'")                            // chuẩn hóa nháy
     .replace(/\s*-\s*/g, '-')                           // chuẩn hóa dấu gạch
     .replace(/\s+/g, ' ')                               // collapse spaces

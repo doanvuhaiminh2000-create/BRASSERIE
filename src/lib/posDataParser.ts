@@ -14,9 +14,8 @@ const parseExcelNumeric = (val: any): number => {
 const parseExcelDate = (val: any): number => {
   if (val instanceof Date) return val.getTime();
   if (typeof val === 'number') {
-    // Excel date numeric format (days since 1900/1/1) mostly handles this by reading cellDates: true, 
-    // but just in case, we can assume it's unix if it's very large
     if (val > 1000000) return val;
+    if (val < 100000) return Math.round((val - 25569) * 86400 * 1000);
   }
   if (typeof val === 'string') {
     const d = new Date(val);

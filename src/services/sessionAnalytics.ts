@@ -1,7 +1,30 @@
-import { OrderSession, SessionItem } from '../types';
+import { OrderSession } from '../types';
+
+export interface UpsellMetrics {
+  totalAttempts: number;
+  successfulAttempts: number;
+  winRate: number;
+  totalUpsellRevenue: number;
+  reasonMap: Record<string, number>;
+  successByDay: Record<string, { success: number, rejected: number }>;
+  staffLeaderboard: {
+    staffName: string;
+    rate: number;
+    revenue: number;
+    attempts: number;
+  }[];
+}
+
+export interface KitchenMetrics {
+  stationMetrics: Record<string, number>;
+  slowestItems: {
+    name: string;
+    avgTime: number;
+  }[];
+}
 
 export const sessionAnalytics = {
-  getUpsellMetrics(sessions: OrderSession[]) {
+  getUpsellMetrics(sessions: OrderSession[]): UpsellMetrics {
     let totalAttempts = 0;
     let successfulAttempts = 0;
     let totalUpsellRevenue = 0;
@@ -120,7 +143,7 @@ export const sessionAnalytics = {
     };
   },
 
-  getKitchenMetrics(sessions: OrderSession[]) {
+  getKitchenMetrics(sessions: OrderSession[]): KitchenMetrics {
     // Tính cookTime = serve - sent của từng món tương ứng sessionItem
     const stationMap: Record<string, { totalTime: number, count: number }> = {};
     const itemCookTimes: Record<string, { totalTime: number, count: number }> = {};
@@ -132,7 +155,7 @@ export const sessionAnalytics = {
       items.forEach(item => {
         if (item.sentAt && item.status === 'SERVED') {
           // Find logic: nearest SERVE_ITEM log after sentAt for this item
-          const serveLog = logs.find(l => l.action === 'SERVE_ITEM' && l.time >= item.sentAt! && l.details.includes(item.menuItem.displayName));
+          const serveLog = logs.find(l => l.action === 'SERVE_ITEM' && l.time >= item.sentAt! && l.targetItemId === item.id);
           if (serveLog) {
             const cookTime = serveLog.time - item.sentAt;
             const station = item.menuItem.station;

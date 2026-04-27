@@ -225,63 +225,70 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const addItem = async (tableId: number, item: MenuItemFull, isUpsold: boolean = false) => {
     if (!item?.posCode) return;
-    const session = getActiveSessionByTable(tableId);
-    if (!session) return;
+    
+    await db.transaction('rw', db.live_sessions, async () => {
+      const session = await db.live_sessions.where({ tableId, status: 'ACTIVE' }).first();
+      if (!session) return;
 
-    const items = session.items || [];
-    const existingIndex = items.findIndex(i => 
-      i.status === 'PENDING' && i.menuItem?.posCode === item.posCode && i.isUpsold === isUpsold
-    );
+      const items = session.items || [];
+      const existingIndex = items.findIndex(i => 
+        i.status === 'PENDING' && i.menuItem?.posCode === item.posCode && i.isUpsold === isUpsold
+      );
 
-    let newItems: SessionItem[];
-    if (existingIndex >= 0) {
-      newItems = items.map((it, idx) => idx === existingIndex ? { ...it, quantity: (it.quantity || 0) + 1 } : it);
-    } else {
-      const newItem: SessionItem = {
-        id: `item_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-        menuItem: item as any,
-        quantity: 1,
-        isUpsold,
-        status: 'PENDING',
-        round: session.currentRound || 1
+      let newItems: SessionItem[];
+      if (existingIndex >= 0) {
+        newItems = items.map((it, idx) => idx === existingIndex ? { ...it, quantity: (it.quantity || 0) + 1 } : it);
+      } else {
+        const newItem: SessionItem = {
+          id: `item_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+          menuItem: item as any,
+          quantity: 1,
+          isUpsold,
+          status: 'PENDING',
+          round: session.currentRound || 1
+        };
+        newItems = [...items, newItem];
+      }
+
+      const newLog = {
+        id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+        time: Date.now(),
+        staffId: currentUser?.id || 'UNKNOWN',
+        staffName: currentUser?.name || 'UNKNOWN',
+        action: 'ADD_ITEM',
+        details: `Thêm món/Tăng SL: ${item.displayName}`
       };
-      newItems = [...items, newItem];
-    }
 
-    const newLog = {
-      id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-      time: Date.now(),
-      staffId: currentUser?.id || 'UNKNOWN',
-      staffName: currentUser?.name || 'UNKNOWN',
-      action: 'ADD_ITEM',
-      details: `Thêm món/Tăng SL: ${item.displayName}`
-    };
-
-    await updateSession(session.id, {
-      items: newItems,
-      eventLogs: [...(session.eventLogs || []), newLog]
+      await db.live_sessions.update(session.id, {
+        items: newItems,
+        eventLogs: [...(session.eventLogs || []), newLog]
+      });
     });
   };
 
   const updatePendingItemQty = async (tableId: number, itemId: string, delta: number) => {
-    const session = getActiveSessionByTable(tableId);
-    if (!session) return;
+    await db.transaction('rw', db.live_sessions, async () => {
+      const session = await db.live_sessions.where({ tableId, status: 'ACTIVE' }).first();
+      if (!session) return;
 
-    const newItems = session.items.map(i => {
-      if (i.id === itemId && i.status === 'PENDING') {
-        return { ...i, quantity: Math.max(1, i.quantity + delta) };
-      }
-      return i;
+      const newItems = session.items.map(i => {
+        if (i.id === itemId && i.status === 'PENDING') {
+          return { ...i, quantity: Math.max(1, i.quantity + delta) };
+        }
+        return i;
+      });
+
+      await db.live_sessions.update(session.id, { items: newItems });
     });
-
-    await updateSession(session.id, { items: newItems });
   };
 
   const removePendingItem = async (tableId: number, itemId: string) => {
-    const session = getActiveSessionByTable(tableId);
-    if (!session) return;
-    const newItems = session.items.filter(i => !(i.id === itemId && i.status === 'PENDING'));
-    await updateSession(session.id, { items: newItems });
+    await db.transaction('rw', db.live_sessions, async () => {
+      const session = await db.live_sessions.where({ tableId, status: 'ACTIVE' }).first();
+      if (!session) return;
+      const newItems = session.items.filter(i => !(i.id === itemId && i.status === 'PENDING'));
+      await db.live_sessions.update(session.id, { items: newItems });
+    });
   };
 
   const sendRoundToKitchen = async (tableId: number) => {
@@ -323,7 +330,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       staffId: currentUser?.id || 'UNKNOWN',
       staffName: currentUser?.name || 'UNKNOWN',
       action: 'SERVE_ITEM',
-      details: `Phục vụ món: ${item.menuItem.displayName}`
+      details: `Phục vụ món: ${item.menuItem.displayName}`,
+      targetItemId: itemId
     };
 
     await updateSession(session.id, {
