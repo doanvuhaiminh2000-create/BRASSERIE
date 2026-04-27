@@ -1,13 +1,73 @@
 import React, { useState, useMemo } from 'react';
-import { ScatterChart, Scatter, XAxis, YAxis, ZAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, ReferenceLine, ReferenceArea, BarChart, Bar, Legend, PieChart, Pie } from 'recharts';
-import { Star, DollarSign, TrendingUp, AlertTriangle, ArrowRight, Search, Layers, Database } from 'lucide-react';
+import { Star, AlertTriangle, Search, Layers, Database, ArrowRight } from 'lucide-react';
 import { formatCurrency, cn, normalizePosCode } from '../../lib/utils';
 import { useApp } from '../../store/AppContext';
 import { DateRangePicker } from '../../components/DateRangePicker';
 import { useNavigate } from 'react-router-dom';
 import { AnalysisSkeleton } from '../../components/ui/Skeleton';
-import { EmptyState } from '../../components/ui/EmptyState';
 
+// --- Shared Types & Helpers ---
+interface ProcessedItem {
+  posCode: string;
+  displayNameEN: string;
+  section: string;
+  price: number;
+  hasRecipeCost: boolean;
+  cost: number | null;
+  margin: number | null;
+  marginPct: number | null;
+  qty: number;
+  qtyPerDay: number;
+  revenue: number;
+  isActive: boolean;
+  isGhost?: boolean;
+}
+
+type QuadLabel = 'Star' | 'PlowHorse' | 'Puzzle' | 'Dog' | 'NoData' | 'NoCost';
+
+interface ClassifiedItem extends ProcessedItem {
+  quad: QuadLabel;
+  medQty: number;
+  medMargin: number;
+}
+
+function classifyItems(items: ProcessedItem[]): ClassifiedItem[] {
+  const withVol = items.filter(d => d.qtyPerDay > 0 && d.hasRecipeCost && d.marginPct !== null);
+  if (withVol.length === 0) {
+    return items.map(d => ({
+      ...d,
+      quad: d.hasRecipeCost ? 'NoData' : 'NoCost',
+      medQty: 0,
+      medMargin: 0,
+    } as ClassifiedItem));
+  }
+  
+  const sortedQty = [...withVol].map(d => d.qtyPerDay).sort((a, b) => a - b);
+  const sortedMargin = [...withVol].map(d => d.marginPct!).sort((a, b) => a - b);
+  const medQty = sortedQty[Math.floor(sortedQty.length / 2)];
+  const medMargin = sortedMargin[Math.floor(sortedMargin.length / 2)];
+  
+  return items.map(d => {
+    if (!d.hasRecipeCost) return { ...d, quad: 'NoCost' as QuadLabel, medQty, medMargin };
+    if (d.qtyPerDay === 0) return { ...d, quad: 'NoData' as QuadLabel, medQty, medMargin };
+    const hiQty = d.qtyPerDay >= medQty;
+    const hiMg = (d.marginPct ?? 0) >= medMargin;
+    const quad: QuadLabel = hiQty && hiMg ? 'Star' : hiQty ? 'PlowHorse' : hiMg ? 'Puzzle' : 'Dog';
+    return { ...d, quad, medQty, medMargin };
+  });
+}
+
+function getCategoryColor(cat: string) {
+  switch(cat) {
+    case 'Star': return 'var(--color-accent-gold)';
+    case 'PlowHorse': return 'var(--color-accent-blue)';
+    case 'Puzzle': return 'var(--color-accent-purple)';
+    case 'Dog': return 'var(--color-accent-red)';
+    default: return 'var(--color-text-muted)';
+  }
+}
+
+// --- Sub-components ---
 function DataSourceCard({ label, count, total, suffix, dateRange, isReady, actionLabel, onAction }: any) {
   return (
     <div className={cn("bg-[var(--color-bg-surface)] border rounded-2xl p-4 flex flex-col justify-between", isReady ? "border-[var(--color-border-main)]" : "border-amber-500/30 bg-amber-500/5")}>
@@ -44,6 +104,159 @@ function Toggle({ checked, onChange, label }: any) {
   );
 }
 
+function StatCard({ title, value, icon: Icon, color }: any) {
+  return (
+    <div className="bg-[var(--color-bg-surface)] rounded-2xl border border-[var(--color-border-main)] p-6 relative overflow-hidden group">
+      <div className="absolute top-0 left-0 w-1 h-full" style={{ backgroundColor: color }}></div>
+      <div className="flex justify-between items-start mb-4">
+        <p className="text-[10px] text-[var(--color-text-muted)] font-semibold uppercase tracking-widest leading-relaxed">
+          {title}
+        </p>
+        <div className="p-2 rounded-xl bg-[var(--color-bg-main)] border border-[var(--color-border-main)] shrink-0" style={{ color: color }}>
+          <Icon className="w-5 h-5" />
+        </div>
+      </div>
+      <h4 className="text-2xl lg:text-3xl font-black text-white tracking-tight">{value}</h4>
+    </div>
+  );
+}
+
+const QUAD_CONFIG = {
+  PlowHorse: {
+    label: '🐎 Plow Horse',
+    sub: 'Lãi thấp · Bán chạy',
+    color: 'var(--color-accent-blue)',
+    badgeClass: 'bg-[var(--color-accent-blue)]/10 text-[var(--color-accent-blue)] border border-[var(--color-accent-blue)]/30',
+  },
+  Star: {
+    label: '⭐ Star',
+    sub: 'Lãi cao · Bán chạy',
+    color: 'var(--color-accent-gold)',
+    badgeClass: 'bg-[var(--color-accent-gold)]/10 text-[var(--color-accent-gold)] border border-[var(--color-accent-gold)]/30',
+  },
+  Dog: {
+    label: '🐕 Dog',
+    sub: 'Lãi thấp · Bán chậm',
+    color: 'var(--color-accent-red)',
+    badgeClass: 'bg-[var(--color-accent-red)]/10 text-[var(--color-accent-red)] border border-[var(--color-accent-red)]/30',
+  },
+  Puzzle: {
+    label: '🧩 Puzzle',
+    sub: 'Lãi cao · Bán chậm',
+    color: 'var(--color-accent-purple)',
+    badgeClass: 'bg-[var(--color-accent-purple)]/10 text-[var(--color-accent-purple)] border border-[var(--color-accent-purple)]/30',
+  },
+} as const;
+
+function QuadrantMatrix({ 
+  data, 
+  sortKey 
+}: { 
+  data: ClassifiedItem[]; 
+  sortKey: 'revenue' | 'qty' | 'margin';
+}) {
+  const maxRevOverall = Math.max(...data.map(d => d.revenue), 1);
+  
+  const quadOrder: QuadLabel[] = ['PlowHorse', 'Star', 'Dog', 'Puzzle'];
+  
+  return (
+    <div className="relative">
+      {/* Axis labels */}
+      <div className="flex items-center gap-3 mb-2 px-8">
+        <span className="text-[10px] text-[var(--color-text-muted)] flex-1 text-center">← Margin thấp</span>
+        <span className="text-[10px] text-[var(--color-text-muted)] flex-1 text-center">Margin cao →</span>
+      </div>
+      
+      <div className="flex gap-2">
+        {/* Y-axis label */}
+        <div className="flex flex-col justify-around py-4 w-6 shrink-0">
+          <span className="text-[10px] text-[var(--color-text-muted)] [writing-mode:vertical-rl] rotate-180 text-center">Bán chạy ↑</span>
+          <span className="text-[10px] text-[var(--color-text-muted)] [writing-mode:vertical-rl] rotate-180 text-center">↓ Bán chậm</span>
+        </div>
+        
+        {/* 2x2 Grid */}
+        <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-2">
+          {quadOrder.map(quadKey => {
+            const cfg = QUAD_CONFIG[quadKey as keyof typeof QUAD_CONFIG];
+            const items = data
+              .filter(d => d.quad === quadKey)
+              .sort((a, b) => {
+                if (sortKey === 'revenue') return b.revenue - a.revenue;
+                if (sortKey === 'qty') return b.qty - a.qty;
+                return (b.marginPct ?? 0) - (a.marginPct ?? 0);
+              });
+            const show = items.slice(0, 6);
+            const more = items.length - show.length;
+            const maxRevInQuad = Math.max(...items.map(d => d.revenue), 1);
+            
+            return (
+              <div
+                key={quadKey}
+                className="bg-[var(--color-bg-surface)] border border-[var(--color-border-main)] rounded-2xl p-4 flex flex-col gap-2 min-h-[200px]"
+              >
+                {/* Header */}
+                <div className="flex items-center justify-between mb-1">
+                  <div>
+                    <span className={cn("text-xs font-black px-2.5 py-1 rounded-lg uppercase tracking-wider", cfg.badgeClass)}>
+                      {cfg.label}
+                    </span>
+                    <p className="text-[10px] text-[var(--color-text-muted)] mt-1 ml-0.5">{cfg.sub}</p>
+                  </div>
+                  <span className="text-xl font-black text-white">{items.length}</span>
+                </div>
+                
+                {/* Items */}
+                {show.length === 0 ? (
+                  <div className="flex-1 flex items-center justify-center text-[10px] text-[var(--color-text-muted)] uppercase tracking-widest">
+                    Không có món
+                  </div>
+                ) : (
+                  <div className="space-y-1.5 flex-1">
+                    {show.map(item => (
+                      <div
+                        key={item.posCode}
+                        className="flex items-center justify-between p-2.5 rounded-xl border border-[var(--color-border-main)] hover:border-white/20 transition-colors cursor-default group"
+                      >
+                        {/* Tên món — truncate nếu dài */}
+                        <span className="text-xs font-bold text-white truncate flex-1 mr-3" title={item.displayNameEN}>{item.displayNameEN}</span>
+                        
+                        {/* Meta info */}
+                        <div className="flex items-center gap-3 shrink-0">
+                          <span className="text-[10px] text-[var(--color-text-muted)]">{item.qtyPerDay.toFixed(1)}/ngày</span>
+                          {item.hasRecipeCost && item.marginPct !== null && (
+                            <span className="text-[10px] font-bold" style={{ color: cfg.color }}>{item.marginPct.toFixed(1)}%</span>
+                          )}
+                          {/* Mini bar thể hiện doanh thu tương đối */}
+                          <div className="w-10 h-1.5 bg-white/10 rounded-full overflow-hidden hidden sm:block">
+                            <div 
+                              className="h-full rounded-full transition-all"
+                              style={{ 
+                                width: `${Math.round((item.revenue / maxRevInQuad) * 100)}%`,
+                                backgroundColor: cfg.color 
+                              }}
+                            />
+                          </div>
+                          <span className="text-[10px] text-[var(--color-text-muted)] hidden lg:inline">{formatCurrency(item.revenue)}</span>
+                        </div>
+                      </div>
+                    ))}
+                    {more > 0 && (
+                      <p className="text-[10px] text-[var(--color-text-muted)] pl-1 pt-1">
+                        +{more} món nữa (xem tab Bảng Chi Tiết)
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// --- Main Interface ---
 export function MenuAnalysis() {
   const { menu, posBatches, isReady } = useApp();
   const navigate = useNavigate();
@@ -52,25 +265,46 @@ export function MenuAnalysis() {
   const [endDate, setEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
   
   const [onlyActiveMenu, setOnlyActiveMenu] = useState(false);
-  const [activeTab, setActiveTab] = useState<'MATRIX' | 'TABLE' | 'SECTION'>('MATRIX');
+  const [activeTab, setActiveTab] = useState<'MATRIX' | 'TABLE'>('MATRIX');
   const [searchTerm, setSearchTerm] = useState('');
   const [showTop50, setShowTop50] = useState(false);
   const [selectedSection, setSelectedSection] = useState<string>('ALL');
-  const [hoveredQuadrant, setHoveredQuadrant] = useState<string | null>(null);
+  const [sortKey, setSortKey] = useState<'revenue' | 'qty' | 'margin'>('revenue');
 
   const activeRange = useMemo(() => ({ start: startDate, end: endDate }), [startDate, endDate]);
+
+  const realPosRevenue = useMemo(() => {
+    const startMs = new Date(activeRange.start).setHours(0,0,0,0);
+    const endMs = new Date(activeRange.end).setHours(23,59,59,999);
+    
+    let total = 0;
+    const uniqueTx = new Set<number>();
+    for (const batch of posBatches) {
+      for (const sum of batch.summary) {
+        if (sum.timeStart >= startMs && sum.timeStart <= endMs && !uniqueTx.has(sum.transaction)) {
+          uniqueTx.add(sum.transaction);
+          total += sum.finalTotal;
+        }
+      }
+    }
+    return total;
+  }, [posBatches, activeRange]);
 
   const posDateRange = useMemo(() => {
     if (!posBatches.length) return null;
     let min = Infinity;
     let max = 0;
     posBatches.forEach(b => {
-      min = Math.min(min, new Date(b.dateFrom).getTime());
-      max = Math.max(max, new Date(b.dateTo).getTime());
+      const from = new Date(b.dateFrom).getTime();
+      const to = new Date(b.dateTo).getTime();
+      if (!isNaN(from)) min = Math.min(min, from);
+      if (!isNaN(to)) max = Math.max(max, to);
     });
+    if (min === Infinity || max === 0) return 'Dữ liệu ngày không hợp lệ';
     return `${new Date(min).toLocaleDateString('vi-VN')} → ${new Date(max).toLocaleDateString('vi-VN')}`;
   }, [posBatches]);
 
+  // 1. Build raw processed data (không classify ở đây)
   const menuMatrix = useMemo(() => {
     const startMs = new Date(activeRange.start).setHours(0,0,0,0);
     const endMs = new Date(activeRange.end).setHours(23,59,59,999);
@@ -133,79 +367,64 @@ export function MenuAnalysis() {
       const cost = hasRecipeCost ? m.cost! : null;
       const margin = hasRecipeCost ? m.price - cost! : null;
       const marginPct = hasRecipeCost && m.price > 0 ? (margin! / m.price) * 100 : null;
-      const grossProfit = hasRecipeCost ? margin! * totalQty : null;
 
       return { 
         ...m, 
         cost, hasRecipeCost,
-        margin, marginPct, grossProfit,
+        margin, marginPct,
         qty: totalQty, qtyPerDay, revenue: totalRev
-      };
+      } as ProcessedItem;
     });
 
-    // 3. Phân loại theo MEDIAN
-    const withVol = dataset.filter((d: any) => d.qtyPerDay > 0 && d.hasRecipeCost);
-    if (withVol.length === 0) {
-      return dataset.map((d: any) => ({...d, category: 'NoData' as const, categoryLabel: 'NoData', recommendation: 'Cần thêm dữ liệu bán hàng', medQty: 0, medMargin: 0}));
-    }
-    const sortedQty = [...withVol].map(d => d.qtyPerDay).sort((a,b) => a-b);
-    const sortedMargin = [...withVol].map(d => d.marginPct).sort((a,b) => a-b);
-    const medQty = sortedQty[Math.floor(sortedQty.length/2)];
-    const medMargin = sortedMargin[Math.floor(sortedMargin.length/2)];
-
-    return dataset.map((d: any) => {
-      let category = 'Dog';
-      let categoryLabel = 'Dog';
-      let recommendation = '';
-      if (!d.hasRecipeCost) {
-        return { ...d, category: 'NoCost' as const, categoryLabel: 'Chưa có cost', recommendation: 'Cần upload file định lượng', medQty: 0, medMargin: 0 };
-      }
-      if (d.qtyPerDay === 0) { category = 'NoData'; categoryLabel = 'NoData'; recommendation = 'Cần thêm dữ liệu bán hàng'; }
-      else if (d.qtyPerDay >= medQty && d.marginPct >= medMargin) { category = 'Star'; categoryLabel = 'Star'; recommendation = '✅ Đẩy mạnh upsell, giữ chất lượng'; }
-      else if (d.qtyPerDay >= medQty && d.marginPct < medMargin) { category = 'PlowHorse'; categoryLabel = 'Plow Horse'; recommendation = '⚠️ Tối ưu cost hoặc tăng giá nhẹ'; }
-      else if (d.qtyPerDay < medQty && d.marginPct >= medMargin) { category = 'Puzzle'; categoryLabel = 'Puzzle'; recommendation = '📣 Cải thiện marketing/đặt vị trí menu'; }
-      else { category = 'Dog'; categoryLabel = 'Dog'; recommendation = '🗑️ Xem xét loại bỏ hoặc làm lại công thức'; }
-      return { ...d, category, categoryLabel, recommendation, medQty, medMargin, numDays };
-    });
+    return dataset;
   }, [menu, posBatches, onlyActiveMenu, activeRange]);
 
-  const globalMedQty = menuMatrix.length && menuMatrix[0].medQty ? menuMatrix[0].medQty : 0;
-  const globalMedMargin = menuMatrix.length && menuMatrix[0].medMargin ? menuMatrix[0].medMargin : 0;
+  // 2. Classify sau khi đã filter
+  const displayData = useMemo(() => {
+    let base = menuMatrix;
+    if (selectedSection !== 'ALL') base = base.filter(m => m.section === selectedSection);
+    if (showTop50) base = [...base].sort((a,b) => b.revenue - a.revenue).slice(0, Math.ceil(base.length / 2));
+    return classifyItems(base);
+  }, [menuMatrix, selectedSection, showTop50]);
 
-  const totalVol = menuMatrix.reduce((acc: number, d: any) => acc + d.qty, 0);
-  const totalRev = menuMatrix.reduce((acc: number, d: any) => acc + d.revenue, 0);
-  const totalGP = menuMatrix.reduce((acc: number, d: any) => acc + d.grossProfit, 0);
-  const avgMargin = totalRev > 0 ? (totalGP / totalRev) * 100 : 0;
-
-  const withVolData = menuMatrix.filter((m: any) => m.qty > 0);
-  const starsCount = withVolData.filter((m: any) => m.category === 'Star').length;
-  const dogsCount = withVolData.filter((m: any) => m.category === 'Dog').length;
+  // 3. Summary metrics tính từ displayData
+  const summaryMetrics = useMemo(() => {
+    const totalVol = displayData.reduce((s,d) => s + d.qty, 0);
+    const totalRev = displayData.reduce((s,d) => s + d.revenue, 0);
+    const starsCount = displayData.filter(d => d.quad === 'Star').length;
+    const dogsCount = displayData.filter(d => d.quad === 'Dog').length;
+    const noCostCount = displayData.filter(d => d.quad === 'NoCost' && d.qty > 0).length;
+    return { totalVol, totalRev, starsCount, dogsCount, noCostCount };
+  }, [displayData]);
 
   if (!isReady) {
     return <div className="p-6 md:p-8 max-w-[1600px] mx-auto space-y-6"><AnalysisSkeleton /></div>;
   }
 
+  const uniqueSections = Array.from(new Set(menuMatrix.map(m => m.section))).filter(Boolean);
+
   return (
     <div className="p-6 md:p-8 max-w-[1600px] mx-auto space-y-6 animate-in fade-in pb-20">
       
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-4">
+      {/* Header + DatePicker */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
           <h1 className="text-3xl font-bold text-white tracking-tight uppercase">Menu Engineering</h1>
-          <p className="text-[var(--color-text-muted)] text-sm mt-1">Lãi cao/thấp (Margin) × Bán chạy/chậm (Volume)</p>
+          <p className="text-[var(--color-text-muted)] text-sm mt-1">
+            Lãi cao/thấp (Margin) × Bán chạy/chậm (Volume)
+          </p>
         </div>
-        
-        <DateRangePicker 
-          startDate={startDate} setStartDate={setStartDate}
-          endDate={endDate} setEndDate={setEndDate}
-        />
+        <DateRangePicker startDate={startDate} setStartDate={setStartDate} endDate={endDate} setEndDate={setEndDate} />
       </div>
 
-      <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-3 mb-6 text-blue-400 text-sm flex items-center gap-2">
+      {/* Data source info banner */}
+      <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-3 text-blue-400 text-sm flex items-center gap-2">
         <Database className="w-4 h-4" />
         Phân tích Menu Engineering chỉ sử dụng dữ liệu POS để đảm bảo tính chính xác. Dữ liệu Live Entry không được tính vào.
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      {/* DataSourceCards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <DataSourceCard 
           label="Menu Mapping" 
           count={menu.filter(m => m.isActive).length}
@@ -234,233 +453,107 @@ export function MenuAnalysis() {
         />
       </div>
 
+      {/* Controls row */}
       <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-[var(--color-bg-surface)] p-4 rounded-2xl border border-[var(--color-border-main)]">
         <div className="flex flex-wrap items-center gap-4">
-          <Toggle 
-            checked={onlyActiveMenu} 
-            onChange={setOnlyActiveMenu}
-            label="Chỉ phân tích menu hiện đang bán"
-          />
-          {!onlyActiveMenu && (
-            <span className="text-amber-500 text-xs font-bold bg-amber-500/10 px-3 py-1 rounded-full animate-in fade-in slide-in-from-left-2">
-              ⚠️ Bao gồm món Legacy đã ngưng
-            </span>
-          )}
-        </div>
-        
-        <div className="flex bg-[var(--color-bg-main)] p-1 rounded-xl">
-          <button onClick={() => setActiveTab('MATRIX')} className={cn("px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-colors", activeTab === 'MATRIX' ? "bg-[var(--color-accent-gold)] text-black" : "text-[var(--color-text-muted)] hover:text-white")}>Ma Trận</button>
-          <button onClick={() => setActiveTab('TABLE')} className={cn("px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-colors", activeTab === 'TABLE' ? "bg-[var(--color-accent-blue)] text-black" : "text-[var(--color-text-muted)] hover:text-white")}>Bảng Chi Tiết</button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-        <StatCard title="Tổng Món Phát Sinh" value={withVolData.length} icon={Layers} color="white" />
-        <div className="bg-[var(--color-bg-surface)] rounded-2xl border border-[var(--color-border-main)] p-6 relative overflow-hidden group">
-           <div className="absolute top-0 right-0 p-4 opacity-10 text-[var(--color-accent-green)] transition-transform duration-500 group-hover:scale-110"><Database size={64}/></div>
-           <h3 className="text-xs font-bold text-[var(--color-text-muted)] uppercase tracking-widest mb-1 relative z-10 flex flex-col">Nguồn Doanh Thu <span className="text-[9px] normal-case opacity-70">(Trước CK)</span></h3>
-           <p className="text-2xl font-black text-white tracking-tight relative z-10">{formatCurrency(totalRev)}</p>
-        </div>
-        <StatCard title="Món Chưa Có Cost" value={menuMatrix.filter((m: any) => !m.hasRecipeCost && m.qty > 0).length} icon={AlertTriangle} color="var(--color-accent-orange)" />
-        <StatCard title="Số Món Lãi + Bán Chạy" value={starsCount} icon={Star} color="var(--color-accent-gold)" />
-        <StatCard title="Cần Review (Dog)" value={dogsCount} icon={AlertTriangle} color="var(--color-accent-red)" />
-      </div>
-
-      {activeTab === 'MATRIX' && (() => {
-        const uniqueSections = Array.from(new Set(menuMatrix.map((m: any) => m.section))).filter(Boolean);
-        let filteredMatrix = menuMatrix;
-        if (selectedSection !== 'ALL') {
-          filteredMatrix = filteredMatrix.filter((m: any) => m.section === selectedSection);
-        }
-        if (showTop50) {
-          filteredMatrix = [...filteredMatrix].sort((a,b) => b.revenue - a.revenue).slice(0, Math.ceil(filteredMatrix.length / 2));
-        }
-
-        const topLabeledItems = new Set<string>();
-        const byCategory: Record<string, any[]> = {};
-        for (const m of filteredMatrix) {
-          if (!m.hasRecipeCost || m.qty === 0) continue;
-          if (!byCategory[m.category]) byCategory[m.category] = [];
-          byCategory[m.category].push(m);
-        }
-        for (const cat of Object.keys(byCategory)) {
-          byCategory[cat]
-            .sort((a: any, b: any) => b.revenue - a.revenue)
-            .slice(0, 5)
-            .forEach((m: any) => topLabeledItems.add(m.posCode));
-        }
-
-        const jitteredMatrix = filteredMatrix.map((m: any, idx: number) => ({
-          ...m,
-          qtyJittered: m.qtyPerDay + (idx % 2 === 0 ? 0.05 : -0.05) * (idx % 5),
-          marginPctJittered: m.marginPct !== null ? m.marginPct + (idx % 3 === 0 ? 0.3 : -0.3) : null
-        }));
-
-        const maxQty = Math.max(...jitteredMatrix.map((d: any) => d.qtyJittered), globalMedQty + 1);
-        const minQty = Math.max(0, Math.min(...jitteredMatrix.map((d: any) => d.qtyJittered)));
-        const maxMargin = Math.max(...jitteredMatrix.map((d: any) => d.marginPctJittered || 0), globalMedMargin + 1);
-        const minMargin = Math.min(...jitteredMatrix.map((d: any) => d.marginPctJittered || 0), globalMedMargin - 1);
-
-        const deltaQty = Math.max(Math.abs(maxQty - globalMedQty), Math.abs(globalMedQty - minQty)) * 1.1; // 10% padding
-        const deltaMargin = Math.max(Math.abs(maxMargin - globalMedMargin), Math.abs(globalMedMargin - minMargin)) * 1.1;
-
-        const domainQty = [
-          (dataMin: number) => Math.max(0, globalMedQty - deltaQty),
-          (dataMax: number) => globalMedQty + deltaQty
-        ];
-        const domainMargin = [
-          (dataMin: number) => globalMedMargin - deltaMargin,
-          (dataMax: number) => globalMedMargin + deltaMargin
-        ];
-
-        return (
-        <div className="bg-[var(--color-bg-surface)] border border-[var(--color-border-main)] rounded-2xl p-6 shadow-xl animate-in fade-in zoom-in-95 duration-500">
-          <div className="flex justify-between items-center mb-6">
-             <h3 className="font-bold text-white uppercase tracking-wider text-sm">Biểu Đồ Ma Trận Lượt Bán vs Lợi Nhuận</h3>
-             <div className="flex flex-col md:flex-row items-center gap-4">
-                 <select 
-                   value={selectedSection}
-                   onChange={e => setSelectedSection(e.target.value)}
-                   className="bg-[var(--color-bg-main)] text-white text-xs font-bold px-3 py-1.5 rounded border border-[var(--color-border-main)] outline-none cursor-pointer uppercase tracking-widest min-w-[150px]"
-                 >
-                   <option value="ALL">TẤT CẢ NHÓM MÓN</option>
-                   {uniqueSections.map(s => <option key={String(s)} value={String(s)}>{String(s)}</option>)}
-                 </select>
-                 <Toggle 
-                   checked={showTop50}
-                   onChange={setShowTop50}
-                   label="Top 50% Doanh Thu"
-                 />
-             </div>
-          </div>
+          <Toggle checked={onlyActiveMenu} onChange={setOnlyActiveMenu} label="Chỉ phân tích menu hiện đang bán" />
           
-          {totalVol === 0 ? (
-             <div className="h-[400px] flex items-center justify-center text-[var(--color-text-muted)] italic">Không có dữ liệu lượt bán trong thời gian này</div>
-          ) : (
-            <div className="h-[700px] w-full relative">
-              <div className="relative z-10 h-full">
-                <ResponsiveContainer>
-                  <ScatterChart margin={{ top: 20, right: 30, bottom: 20, left: 30 }}>
-                    <XAxis type="number" dataKey="marginPctJittered" name="Lợi nhuận (%)" stroke="var(--color-text-muted)" tickLine={false} axisLine={false} domain={domainMargin} />
-                    <YAxis type="number" dataKey="qtyJittered" name="Lượt bán / Ngày" stroke="var(--color-text-muted)" tickLine={false} axisLine={false} domain={domainQty} />
-                    <ZAxis type="number" dataKey="revenue" range={[80, 800]} />
-                    
-                    {/* Background Quadrants */}
-                    <ReferenceArea x1={-9999} x2={globalMedMargin} y1={globalMedQty} y2={99999} fill="var(--color-accent-blue)" fillOpacity={0.08} /> {/* Plow Horse */}
-                    <ReferenceArea x1={globalMedMargin} x2={99999} y1={globalMedQty} y2={99999} fill="var(--color-accent-gold)" fillOpacity={0.08} /> {/* Star */}
-                    <ReferenceArea x1={-9999} x2={globalMedMargin} y1={-9999} y2={globalMedQty} fill="var(--color-accent-red)" fillOpacity={0.08} /> {/* Dog */}
-                    <ReferenceArea x1={globalMedMargin} x2={99999} y1={-9999} y2={globalMedQty} fill="var(--color-accent-purple)" fillOpacity={0.08} /> {/* Puzzle */}
+          {/* Sort dropdown */}
+          {activeTab === 'MATRIX' && (
+            <select
+              value={sortKey}
+              onChange={e => setSortKey(e.target.value as any)}
+              className="bg-[var(--color-bg-main)] text-white text-xs font-bold px-3 py-1.5 rounded border border-[var(--color-border-main)] outline-none"
+            >
+              <option value="revenue">Sắp xếp: doanh thu</option>
+              <option value="qty">Sắp xếp: lượt bán</option>
+              <option value="margin">Sắp xếp: margin %</option>
+            </select>
+          )}
 
-                    <Tooltip 
-                      cursor={{ strokeDasharray: '3 3' }} 
-                      contentStyle={{ backgroundColor: 'var(--color-bg-main)', borderColor: 'var(--color-border-main)', borderRadius: '12px', color: '#fff', boxShadow: '0 10px 25px rgba(0,0,0,0.5)' }}
-                      content={({ active, payload }) => {
-                        if (active && payload && payload.length) {
-                          const data = payload[0].payload;
-                          return (
-                            <div className="bg-[var(--color-bg-main)] border border-[var(--color-border-main)] p-4 rounded-xl shadow-2xl min-w-[250px] pointer-events-none">
-                              <p className="font-bold text-white mb-1 leading-tight">{data.displayNameEN}</p>
-                              <div className="flex items-center gap-2 mb-3">
-                                <span className="text-[10px] bg-white/10 px-2 py-0.5 rounded text-[var(--color-text-muted)] font-mono">{data.posCode}</span>
-                                <span style={{color: getCategoryColor(data.category), fontWeight: '900', fontSize: '10px', textTransform: 'uppercase'}}>{data.categoryLabel}</span>
-                              </div>
-                              <div className="space-y-1 text-xs">
-                                <div className="flex justify-between"><span className="text-[var(--color-text-muted)]">Bán/ngày:</span> <span className="font-bold text-white">{data.qtyPerDay}/ngày (từ {data.qty})</span></div>
-                                <div className="flex justify-between pt-1 border-t border-white/5"><span className="text-[var(--color-text-muted)]">Doanh thu:</span> <span className="font-bold text-[var(--color-accent-green)]">{formatCurrency(data.revenue)}</span></div>
-                                {data.hasRecipeCost ? (
-                                  <div className="flex justify-between"><span className="text-[var(--color-text-muted)]">Margin:</span> <span className="font-bold text-[var(--color-accent-gold)]">{data.marginPct.toFixed(1)}% ({formatCurrency(data.margin)})</span></div>
-                                ) : (
-                                  <div className="text-[10px] text-amber-500 mt-2 bg-amber-500/10 p-1 rounded inline-block">Cần thêm Cost/Recipe</div>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        }
-                        return null;
-                      }}
-                    />
-                    <ReferenceLine y={globalMedQty} stroke="rgba(255,255,255,0.2)" strokeDasharray="3 3" />
-                    <ReferenceLine x={globalMedMargin} stroke="rgba(255,255,255,0.2)" strokeDasharray="3 3" />
-                    <Scatter 
-                      data={jitteredMatrix}
-                      onMouseEnter={(data) => setHoveredQuadrant(data.category)}
-                      onMouseLeave={() => setHoveredQuadrant(null)}
-                      shape={(props: any) => {
-                        const { cx, cy, payload } = props;
-                        const isTop = topLabeledItems.has(payload.posCode);
-                        const r = Math.max(8, Math.min(24, Math.sqrt(payload.revenue / 50000)));
-                        const cColor = getCategoryColor(payload.category);
-                        const isHovered = hoveredQuadrant === payload.category;
-                        const isFaded = hoveredQuadrant && !isHovered;
-                        
-                        return (
-                          <g style={{ cursor: 'pointer', transition: 'all 0.3s ease' }}>
-                            <circle 
-                              cx={cx} 
-                              cy={cy} 
-                              r={r} 
-                              fill={cColor}
-                              fillOpacity={isFaded ? 0.1 : 0.8}
-                              stroke="var(--color-bg-surface)"
-                              strokeWidth={2}
-                            />
-                            {isTop && !isFaded && (
-                              <text 
-                                x={cx} 
-                                y={cy - r - 6} 
-                                textAnchor="middle" 
-                                fill="white" 
-                                fontSize="11" 
-                                fontWeight="bold"
-                                style={{ paintOrder: 'stroke', stroke: 'rgba(0,0,0,0.85)', strokeWidth: 4, transformOrigin: `${cx}px ${cy}px`, transition: 'all 0.2s' }}
-                              >
-                                {payload.displayNameEN.length > 18 ? payload.displayNameEN.substring(0, 16) + '…' : payload.displayNameEN}
-                              </text>
-                            )}
-                          </g>
-                        );
-                      }}
-                    />
-                  </ScatterChart>
-                </ResponsiveContainer>
+          {/* Section dropdown */}
+          <select
+            value={selectedSection}
+            onChange={e => setSelectedSection(e.target.value)}
+            className="bg-[var(--color-bg-main)] text-white text-xs font-bold px-3 py-1.5 rounded border border-[var(--color-border-main)] outline-none uppercase tracking-widest min-w-[150px]"
+          >
+            <option value="ALL">TẤT CẢ NHÓM MÓN</option>
+            {uniqueSections.map(s => <option key={String(s)} value={String(s)}>{String(s)}</option>)}
+          </select>
+
+          {/* Top50 toggle */}
+          <Toggle
+            checked={showTop50}
+            onChange={setShowTop50}
+            label={selectedSection === 'ALL' ? 'Top 50% doanh thu' : `Top 50% (${selectedSection})`}
+          />
+        </div>
+
+        {/* Tab switcher */}
+        <div className="flex bg-[var(--color-bg-main)] p-1 rounded-xl">
+          <button onClick={() => setActiveTab('MATRIX')} className={cn("px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-colors", activeTab === 'MATRIX' ? "bg-[var(--color-accent-gold)] text-black" : "text-[var(--color-text-muted)] hover:text-white")}>
+            Ma Trận
+          </button>
+          <button onClick={() => setActiveTab('TABLE')} className={cn("px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-colors", activeTab === 'TABLE' ? "bg-[var(--color-accent-blue)] text-black" : "text-[var(--color-text-muted)] hover:text-white")}>
+            Bảng Chi Tiết
+          </button>
+        </div>
+      </div>
+
+      {/* Summary KPI cards */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <StatCard title="Tổng Món Phát Sinh" value={displayData.filter(d => d.qty > 0).length} icon={Layers} color="white" />
+        <div className="bg-[var(--color-bg-surface)] rounded-2xl border border-[var(--color-border-main)] py-4 px-6 relative overflow-hidden group">
+           <div className="absolute top-0 right-0 p-4 opacity-10 text-[var(--color-accent-green)] transition-transform duration-500 group-hover:scale-110"><Database size={64}/></div>
+           <h3 className="text-[10px] font-bold text-[var(--color-text-muted)] uppercase tracking-widest mb-1 relative z-10">Doanh Thu Tổng (POS)</h3>
+           <p className="text-xl font-black text-white tracking-tight relative z-10 mb-2" title="Doanh thu thực tế sau chiết khấu hóa đơn">{formatCurrency(realPosRevenue)}</p>
+           
+           <h3 className="text-[10px] font-bold text-[var(--color-text-muted)] uppercase tracking-widest mb-1 relative z-10 border-t border-[var(--color-border-main)] pt-2">Giá Trị Món (Trước CK)</h3>
+           <p className="text-lg font-black text-[var(--color-accent-gold)] tracking-tight relative z-10" title="Tổng giá trị các món (chưa trừ CK trên tổng menu)">{formatCurrency(summaryMetrics.totalRev)}</p>
+        </div>
+        <StatCard title="Món Chưa Có Cost" value={summaryMetrics.noCostCount} icon={AlertTriangle} color="var(--color-accent-orange)" />
+        <StatCard title="Số Món Lãi + Bán Chạy" value={summaryMetrics.starsCount} icon={Star} color="var(--color-accent-gold)" />
+        <StatCard title="Cần Review (Dog)" value={summaryMetrics.dogsCount} icon={AlertTriangle} color="var(--color-accent-red)" />
+      </div>
+
+      {/* MATRIX TAB */}
+      {activeTab === 'MATRIX' && (
+        <div className="bg-[var(--color-bg-surface)] border border-[var(--color-border-main)] rounded-2xl p-6 shadow-xl w-full animate-in fade-in zoom-in-95 duration-500">
+          <h3 className="font-bold text-white uppercase tracking-wider text-sm mb-6">
+            Phân loại Menu Engineering
+          </h3>
+          
+          {summaryMetrics.totalVol === 0 ? (
+            <div className="h-[300px] flex items-center justify-center text-[var(--color-text-muted)] italic">
+              Không có dữ liệu lượt bán trong khoảng thời gian này
+            </div>
+          ) : (
+            <QuadrantMatrix data={displayData} sortKey={sortKey} />
+          )}
+
+          {/* Legend */}
+          <div className="flex flex-wrap gap-4 justify-center mt-6 pt-4 border-t border-[var(--color-border-main)]">
+            {Object.entries(QUAD_CONFIG).map(([key, cfg]) => (
+              <div key={key} className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cfg.color }} />
+                <div>
+                  <div className="text-xs font-bold text-white">{key}</div>
+                  <div className="text-[10px] text-[var(--color-text-muted)]">{cfg.sub}</div>
+                </div>
               </div>
-              
-              {/* Fake quadrant labels on top */}
-              <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-8 z-20">
-                <div className="flex justify-between items-start h-1/2 mt-10 mx-10">
-                   <div>
-                     <div className="text-sm font-black text-blue-400/80 uppercase tracking-widest drop-shadow-md">🐎 PLOW HORSE</div>
-                     <div className="text-xs text-white/50 mt-1">Lãi thấp · Bán chạy</div>
-                   </div>
-                   <div className="text-right">
-                     <div className="text-sm font-black text-yellow-400/80 uppercase tracking-widest drop-shadow-md">⭐ STAR</div>
-                     <div className="text-xs text-white/50 mt-1">Lãi cao · Bán chạy</div>
-                   </div>
-                </div>
-                <div className="flex justify-between items-end h-1/2 mb-10 mx-10">
-                   <div>
-                     <div className="text-sm font-black text-red-400/80 uppercase tracking-widest drop-shadow-md">🐕 DOG</div>
-                     <div className="text-xs text-white/50 mt-1">Lãi thấp · Bán chậm</div>
-                   </div>
-                   <div className="text-right">
-                     <div className="text-sm font-black text-purple-400/80 uppercase tracking-widest drop-shadow-md">🧩 PUZZLE</div>
-                     <div className="text-xs text-white/50 mt-1">Lãi cao · Bán chậm</div>
-                   </div>
-                </div>
+            ))}
+            <div className="flex items-center gap-2">
+              <div className="w-2.5 h-2.5 rounded-full bg-[var(--color-text-muted)]" />
+              <div>
+                <div className="text-xs font-bold text-white">NoCost</div>
+                <div className="text-[10px] text-[var(--color-text-muted)]">Cần upload định lượng</div>
               </div>
             </div>
-          )}
-          <div className="flex flex-wrap gap-4 justify-center mt-4 pt-4 border-t border-[var(--color-border-main)]">
-            <LegendItem color="var(--color-accent-gold)" label="Star" desc="Lãi cao · Bán chạy" />
-            <LegendItem color="var(--color-accent-blue)" label="Plow Horse" desc="Lãi thấp · Bán chạy" />
-            <LegendItem color="var(--color-accent-purple)" label="Puzzle" desc="Lãi cao · Bán chậm" />
-            <LegendItem color="var(--color-accent-red)" label="Dog" desc="Lãi thấp · Bán chậm" />
-            <LegendItem color="var(--color-text-muted)" label="Chưa có cost" desc="Cần upload định lượng" />
           </div>
         </div>
-      );
-      })()}
+      )}
 
+      {/* TABLE TAB */}
       {activeTab === 'TABLE' && (
         <div className="bg-[var(--color-bg-surface)] border border-[var(--color-border-main)] rounded-2xl shadow-xl overflow-hidden animate-in fade-in duration-500">
           <div className="p-4 border-b border-[var(--color-border-main)] flex items-center bg-[var(--color-bg-main)]">
@@ -487,7 +580,7 @@ export function MenuAnalysis() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--color-border-main)]">
-                {menuMatrix.filter((m: any) => m.displayNameEN.toLowerCase().includes(searchTerm.toLowerCase()) || m.posCode.toLowerCase().includes(searchTerm.toLowerCase())).sort((a: any, b: any) => b.revenue - a.revenue).map((row: any) => (
+                {displayData.filter(m => m.displayNameEN.toLowerCase().includes(searchTerm.toLowerCase()) || m.posCode.toLowerCase().includes(searchTerm.toLowerCase())).sort((a, b) => b.revenue - a.revenue).map(row => (
                   <tr key={row.posCode} className="hover:bg-white/5 transition-colors">
                     <td className="p-4">
                       <div className="font-bold text-white max-w-[250px] truncate" title={row.displayNameEN}>{row.displayNameEN}</div>
@@ -495,10 +588,10 @@ export function MenuAnalysis() {
                     </td>
                     <td className="p-4 text-right text-[var(--color-text-muted)]">{row.price.toLocaleString()}</td>
                     <td className="p-4 text-right tabular-nums">
-                      <span className={cn(row.hasRecipeCost ? "text-white" : "text-amber-500 font-bold")}>{row.hasRecipeCost ? row.cost.toLocaleString() : "—"}</span>
+                      <span className={cn(row.hasRecipeCost ? "text-white" : "text-amber-500 font-bold")}>{row.hasRecipeCost ? row.cost!.toLocaleString() : "—"}</span>
                     </td>
                     <td className="p-4 text-right tabular-nums font-bold text-[var(--color-accent-gold)]">
-                      {row.hasRecipeCost ? (
+                      {row.hasRecipeCost && row.marginPct !== null ? (
                         <span className="text-[var(--color-accent-gold)]">{row.marginPct.toFixed(1)}%</span>
                       ) : (
                         <span className="text-[var(--color-text-muted)] text-xs">Chưa có cost</span>
@@ -507,9 +600,9 @@ export function MenuAnalysis() {
                     <td className="p-4 text-right text-white font-bold">{row.qtyPerDay} <span className="font-normal text-xs text-[var(--color-text-muted)]">({row.qty})</span></td>
                     <td className="p-4 text-right font-mono text-[var(--color-accent-green)]">{row.revenue.toLocaleString()}</td>
                     <td className="p-4 text-center">
-                       {row.category !== 'NoData' ? (
-                         <span className="text-[10px] font-black uppercase px-2 py-1 rounded border" style={{color: getCategoryColor(row.category), borderColor: getCategoryColor(row.category)}}>
-                           {row.categoryLabel}
+                       {row.quad !== 'NoData' ? (
+                         <span className="text-[10px] font-black uppercase px-2 py-1 rounded border" style={{color: getCategoryColor(row.quad), borderColor: getCategoryColor(row.quad)}}>
+                           {row.quad}
                          </span>
                        ) : (
                          <span className="text-[10px] text-[var(--color-text-muted)]">-</span>
@@ -522,45 +615,7 @@ export function MenuAnalysis() {
           </div>
         </div>
       )}
-    </div>
-  );
-}
 
-function getCategoryColor(cat: string) {
-  switch(cat) {
-    case 'Star': return 'var(--color-accent-gold)';
-    case 'PlowHorse': return 'var(--color-accent-blue)';
-    case 'Puzzle': return 'var(--color-accent-purple)';
-    case 'Dog': return 'var(--color-accent-red)';
-    default: return 'var(--color-text-muted)';
-  }
-}
-
-function LegendItem({ color, label, desc }: { color: string; label: string; desc: string }) {
-  return (
-    <div className="flex items-center gap-2">
-      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color, opacity: 0.7 }}></div>
-      <div>
-        <div className="text-xs font-bold text-white">{label}</div>
-        <div className="text-[10px] text-[var(--color-text-muted)]">{desc}</div>
-      </div>
-    </div>
-  );
-}
-
-function StatCard({ title, value, icon: Icon, color }: any) {
-  return (
-    <div className="bg-[var(--color-bg-surface)] rounded-2xl border border-[var(--color-border-main)] p-6 relative overflow-hidden group">
-      <div className="absolute top-0 left-0 w-1 h-full" style={{ backgroundColor: color }}></div>
-      <div className="flex justify-between items-start mb-4">
-        <p className="text-[10px] text-[var(--color-text-muted)] font-semibold uppercase tracking-widest leading-relaxed">
-          {title}
-        </p>
-        <div className="p-2 rounded-xl bg-[var(--color-bg-main)] border border-[var(--color-border-main)] shrink-0" style={{ color: color }}>
-          <Icon className="w-5 h-5" />
-        </div>
-      </div>
-      <h4 className="text-2xl lg:text-3xl font-black text-white tracking-tight">{value}</h4>
     </div>
   );
 }

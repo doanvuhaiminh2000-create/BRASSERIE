@@ -13,6 +13,7 @@ interface AppState {
   users: User[];
   menu: MenuItemFull[];
   tables: Table[];
+  zones: string[];
   sessions: OrderSession[];
   posBatches: POSBatch[];
   posAggregateByPosCode: Map<string, { qty: number; revenue: number; productName: string; isInCurrentMenu: boolean }>;
@@ -23,6 +24,11 @@ interface AppContextType extends AppState {
   login: (userId: string, pin: string) => boolean;
   logout: () => void;
   updateTable: (tableId: number, updates: Partial<Table>) => void;
+  addTable: (table: Omit<Table, 'id' | 'status' | 'currentSessionId'>) => void;
+  deleteTable: (tableId: number) => void;
+  addZone: (name: string) => void;
+  deleteZone: (name: string, deleteTables?: boolean) => void;
+  renameZone: (oldName: string, newName: string) => void;
   createSession: (tableId: number, guestCount: number) => Promise<OrderSession | null>;
   updateSession: (sessionId: string, updates: Partial<OrderSession>) => Promise<void>;
   addItem: (tableId: number, item: MenuItemFull, isUpsold?: boolean) => Promise<void>;
@@ -46,6 +52,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [users] = useState<User[]>(mockUsers);
   
   const [tables, setTables] = useState<Table[]>([]);
+  const [zones, setZones] = useState<string[]>([]);
 
   // Dexie live queries
   const _sessions = useLiveQuery(() => db.live_sessions.toArray());
@@ -88,12 +95,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const initApp = async () => {
       const savedTables = await dataStore.getSetting('brasserie_tables');
+      const savedZones = await dataStore.getSetting('brasserie_zones');
+      
       if (savedTables) {
         setTables(savedTables);
+        if (savedZones) {
+          setZones(savedZones);
+        } else {
+          // Backward compatibility: extract from tables
+          const uniqueZones = Array.from(new Set(savedTables.map((t: Table) => t.zone)));
+          setZones(uniqueZones as string[]);
+        }
       } else {
         const defaultTables = generateMockTables();
+        const uniqueZones = Array.from(new Set(defaultTables.map(t => t.zone)));
         setTables(defaultTables);
+        setZones(uniqueZones);
         await dataStore.setSetting('brasserie_tables', defaultTables);
+        await dataStore.setSetting('brasserie_zones', uniqueZones);
       }
       setIsTablesLoaded(true);
     };
@@ -104,8 +123,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (isReady) {
       dataStore.setSetting('brasserie_tables', tables);
+      dataStore.setSetting('brasserie_zones', zones);
     }
-  }, [tables, isReady]);
+  }, [tables, zones, isReady]);
 
   // Auth
   const login = (userId: string, pin: string) => {
@@ -122,6 +142,37 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // Table Logic
   const updateTable = (tableId: number, updates: Partial<Table>) => {
     setTables(prev => prev.map(t => t.id === tableId ? { ...t, ...updates } : t));
+  };
+  
+  const addTable = (table: Omit<Table, 'id' | 'status' | 'currentSessionId'>) => {
+    setTables(prev => {
+      const maxId = prev.length > 0 ? Math.max(...prev.map(t => t.id)) : 0;
+      return [...prev, { ...table, id: maxId + 1, status: 'TRONG', currentSessionId: null }];
+    });
+  };
+
+  const deleteTable = (tableId: number) => {
+    setTables(prev => prev.filter(t => t.id !== tableId));
+  };
+
+  const addZone = (name: string) => {
+    setZones(prev => prev.includes(name) ? prev : [...prev, name]);
+  };
+
+  const deleteZone = (name: string, deleteTables: boolean = false) => {
+    setZones(prev => prev.filter(z => z !== name));
+    if (deleteTables) {
+      setTables(prev => prev.filter(t => t.zone !== name));
+    } else {
+      // Default to moving to a "Chờ Sắp Xếp" zone or just leave them?
+      // Better to move them to the first available zone if any
+      setTables(prev => prev.map(t => t.zone === name ? { ...t, zone: zones.find(z => z !== name) || 'Mặc Định' } : t));
+    }
+  };
+
+  const renameZone = (oldName: string, newName: string) => {
+    setZones(prev => prev.map(z => z === oldName ? newName : z));
+    setTables(prev => prev.map(t => t.zone === oldName ? { ...t, zone: newName } : t));
   };
 
   // Session Management
@@ -373,11 +424,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   const value = useMemo(() => ({
-    currentUser, users, menu, tables, sessions, isReady, posBatches, posAggregateByPosCode,
-    login, logout, updateTable, createSession, updateSession, 
+    currentUser, users, menu, tables, zones, sessions, isReady, posBatches, posAggregateByPosCode,
+    login, logout, updateTable, addTable, deleteTable, addZone, deleteZone, renameZone, createSession, updateSession, 
     addItem, updatePendingItemQty, removePendingItem, sendRoundToKitchen, serveItem, cancelItem, recordUpsellAttempt, checkoutSession,
     setMenu, clearMenu, toggleMenuItemActive
-  }), [currentUser, users, menu, tables, sessions, isReady, posBatches, posAggregateByPosCode, clearMenu, setMenu, toggleMenuItemActive]);
+  }), [currentUser, users, menu, tables, zones, sessions, isReady, posBatches, posAggregateByPosCode, clearMenu, setMenu, toggleMenuItemActive, addTable, deleteTable, addZone, deleteZone, renameZone]);
 
   return (
     <AppContext.Provider value={value}>

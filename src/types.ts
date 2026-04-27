@@ -13,11 +13,13 @@ export interface Table {
   id: number;
   name: string;
   capacity: number;
-  zone: 'Trong Nhà' | 'Ngoài Trời' | 'Cửa Sổ' | 'Góc VIP';
+  zone: string;
   status: TableStatus;
   lockedBy?: string | null;
   lockedAt?: number | null;
   currentSessionId?: string | null;
+  x?: number; // percentage (0-100)
+  y?: number; // percentage (0-100)
 }
 
 export type MenuSection = 'APPETIZER' | 'BURGER, PASTA, PIZZA' | 'MAIN DISHES' | 'PREMIUM' | 'DESSERTS';
