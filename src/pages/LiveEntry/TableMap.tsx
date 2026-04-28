@@ -93,11 +93,16 @@ export function TableMap() {
 
   const confirmGuests = async (num: number) => {
     if (!selectingTable) return;
+    if (selectingTable.currentSessionId) {
+      toast.error('Bàn này đã có phiên đang mở');
+      setSelectingTable(null);
+      return;
+    }
+    setSelectingTable(null); // close modal trước để tránh double-click
     
     // Create session immediately
     const session = await createSession(selectingTable.id, num);
     if (!session) return;
-    setSelectingTable(null);
     navigate(`/live-entry/table/${selectingTable.id}`);
   };
 

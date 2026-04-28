@@ -12,11 +12,13 @@ import { DashboardMetrics, posAggregator } from '../../services/posAggregator';
 import { DateRangePicker } from '../../components/DateRangePicker';
 import { DashboardSkeleton, SkeletonLoader } from '../../components/ui/Skeleton';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { OrderSession } from '../../types';
+import { ResponsiveTable, Column } from '../../components/ui/ResponsiveTable';
 
 const COLORS = ['#D4A24E', '#5B9DF0', '#25b589', '#d44848', '#8a5cf5'];
 
 export function Dashboard() {
-  const { sessions, tables, users, isReady } = useApp();
+  const { tables, users, isReady } = useApp();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'FINANCIAL' | 'OPERATIONAL'>('FINANCIAL');
   
@@ -24,6 +26,7 @@ export function Dashboard() {
   const [endDate, setEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
   
   const [dashboardMetrics, setDashboardMetrics] = useState<any>(null);
+  const [filteredSessions, setFilteredSessions] = useState<OrderSession[]>([]);
   const [isAggregating, setIsAggregating] = useState(false);
 
   const activeDateRange = useMemo(() => ({ start: startDate, end: endDate }), [startDate, endDate]);
@@ -35,12 +38,22 @@ export function Dashboard() {
     const fetchAndAggregate = async () => {
       setIsAggregating(true);
       try {
-        const batches = await dataStore.getPOSBatchesInRange(activeDateRange.start, activeDateRange.end);
-        if (batches.length === 0) {
-          if (isMounted) setDashboardMetrics(null);
-        } else {
-          const metrics = posAggregator.aggregate(batches, activeDateRange.start, activeDateRange.end);
-          if (isMounted) setDashboardMetrics(metrics);
+        const startMs = new Date(activeDateRange.start).setHours(0,0,0,0);
+        const endMs = new Date(activeDateRange.end).setHours(23,59,59,999);
+        
+        const [batches, sessionsData] = await Promise.all([
+          dataStore.getPOSBatchesInRange(activeDateRange.start, activeDateRange.end),
+          dataStore.getSessionsInRange(startMs, endMs)
+        ]);
+
+        if (isMounted) {
+          if (batches.length === 0) {
+            setDashboardMetrics(null);
+          } else {
+            const metrics = posAggregator.aggregate(batches, activeDateRange.start, activeDateRange.end);
+            setDashboardMetrics(metrics);
+          }
+          setFilteredSessions(sessionsData);
         }
       } catch (err) {
         console.error("Failed to aggregate batches: ", err);
@@ -51,13 +64,6 @@ export function Dashboard() {
     fetchAndAggregate();
     return () => { isMounted = false; };
   }, [activeDateRange, isReady]);
-
-  // Filter sessions based on date range
-  const filteredSessions = useMemo(() => {
-    const startMs = new Date(activeDateRange.start).setHours(0,0,0,0);
-    const endMs = new Date(activeDateRange.end).setHours(23,59,59,999);
-    return (sessions || []).filter(s => s.openedAt >= startMs && s.openedAt <= endMs);
-  }, [sessions, activeDateRange]);
 
   // --- OPERATIONAL METRICS CALCULATION ---
   const operationalMetrics = useMemo(() => {
@@ -154,6 +160,17 @@ export function Dashboard() {
       staffLeaderboard: Object.values(staffStats).sort((a,b) => b.tables - a.tables)
     };
   }, [filteredSessions, tables, users]);
+
+  const staffColumns: Column<any>[] = [
+    { key: 'name', label: 'Nhân sự', primary: true, render: (s) => <span className="font-bold text-white">{s.name}</span> },
+    { key: 'tables', label: 'Bàn đã phục vụ', align: 'center', render: (s) => <span className="font-mono">{s.tables}</span>, hideOnMobile: true },
+    { key: 'attempts', label: 'Lượt mời Upsell', align: 'center', render: (s) => <span className="font-mono text-[var(--color-accent-blue)]">{s.upsellAttempts}</span>, hideOnMobile: true },
+    { key: 'rate', label: 'Tỷ lệ chốt Upsell', align: 'right', render: (s) => (
+      <span className="font-mono text-[var(--color-accent-green)] font-bold">
+        {s.upsellAttempts > 0 ? ((s.upsellSuccess / s.upsellAttempts) * 100).toFixed(1) : 0}%
+      </span>
+    )}
+  ];
 
   if (!isReady) {
     return <DashboardSkeleton />;
@@ -306,38 +323,17 @@ export function Dashboard() {
             </div>
           </div>
 
-          <div className="bg-[var(--color-bg-surface)] border border-[var(--color-border-main)] rounded-2xl p-6 shadow-sm overflow-hidden">
+          <div className="bg-[var(--color-bg-surface)] border border-[var(--color-border-main)] rounded-2xl p-6 shadow-sm overflow-hidden mt-8">
              <h3 className="font-semibold text-white mb-6 uppercase tracking-wider text-sm flex items-center gap-2">
                <Users className="w-4 h-4 text-[var(--color-accent-gold)]" /> Bảng Xếp Hạng Nhân Sự (Thực tế)
              </h3>
-             <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left">
-                  <thead className="text-[10px] uppercase text-[var(--color-text-muted)] bg-[var(--color-bg-main)]">
-                    <tr>
-                      <th className="px-6 py-3 font-black tracking-widest rounded-tl-lg">Nhân sự</th>
-                      <th className="px-6 py-3 font-black tracking-widest text-center">Bàn đã phục vụ</th>
-                      <th className="px-6 py-3 font-black tracking-widest text-center">Lượt mời Upsell</th>
-                      <th className="px-6 py-3 font-black tracking-widest text-center rounded-tr-lg">Tỷ lệ chốt Upsell (%)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {operationalMetrics.staffLeaderboard.map((s, i) => (
-                      <tr key={i} className="border-b border-[var(--color-border-main)] last:border-0 hover:bg-[var(--color-bg-main)]/50 transition-colors">
-                        <td className="px-6 py-4 font-bold text-white">{s.name}</td>
-                        <td className="px-6 py-4 text-center font-mono">{s.tables}</td>
-                        <td className="px-6 py-4 text-center font-mono text-[var(--color-accent-blue)]">{s.upsellAttempts}</td>
-                        <td className="px-6 py-4 text-center font-mono text-[var(--color-accent-green)] font-bold">
-                           {s.upsellAttempts > 0 ? ((s.upsellSuccess / s.upsellAttempts) * 100).toFixed(1) : 0}%
-                        </td>
-                      </tr>
-                    ))}
-                    {operationalMetrics.staffLeaderboard.length === 0 && (
-                      <tr>
-                        <td colSpan={4} className="px-6 py-8 text-center text-[var(--color-text-muted)] italic text-[10px] uppercase">Chưa có dữ liệu</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+             <div className="mt-4">
+                <ResponsiveTable
+                  data={operationalMetrics.staffLeaderboard}
+                  columns={staffColumns}
+                  keyExtractor={(s) => s.name}
+                  emptyText="Chưa có dữ liệu"
+                />
              </div>
           </div>
         </div>

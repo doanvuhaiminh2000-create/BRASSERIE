@@ -3,6 +3,7 @@ import { DateRangePicker } from '../../components/DateRangePicker';
 import { useApp } from '../../store/AppContext';
 import { dataStore } from '../../services/dataStore';
 import { POSBatch } from '../../types/store';
+import { OrderSession } from '../../types';
 import { cn, formatCurrency } from '../../lib/utils';
 import {
   getValidBills,
@@ -13,6 +14,7 @@ import {
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { Database, Clock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { ResponsiveTable } from '../../components/ui/ResponsiveTable';
 
 function KPICard({ title, value, subtitle, color, source }: { title: string; value: string | number; subtitle?: string; color: string; source?: 'POS' | 'LIVE' | 'POS+LIVE' }) {
   return (
@@ -38,7 +40,7 @@ function KPICard({ title, value, subtitle, color, source }: { title: string; val
 }
 
 export function ServiceTimeAnalysis() {
-  const { sessions, isReady } = useApp();
+  const { isReady } = useApp();
   const navigate = useNavigate();
   const [startDate, setStartDate] = useState<string>(
     new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0]
@@ -47,6 +49,7 @@ export function ServiceTimeAnalysis() {
     new Date().toISOString().split('T')[0]
   );
   const [batches, setBatches] = useState<POSBatch[]>([]);
+  const [filteredSessions, setFilteredSessions] = useState<OrderSession[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   const activeRange = useMemo(
@@ -63,8 +66,14 @@ export function ServiceTimeAnalysis() {
     (async () => {
       setIsLoading(true);
       try {
-        const b = await dataStore.getPOSBatchesInRange(activeRange.start, activeRange.end);
-        if (mounted) setBatches(b);
+        const [b, sData] = await Promise.all([
+          dataStore.getPOSBatchesInRange(activeRange.start, activeRange.end),
+          dataStore.getSessionsInRange(startMs, endMs)
+        ]);
+        if (mounted) {
+          setBatches(b);
+          setFilteredSessions(sData);
+        }
       } finally {
         if (mounted) setIsLoading(false);
       }
@@ -74,7 +83,7 @@ export function ServiceTimeAnalysis() {
 
   // Calculations
   const posMetrics = useMemo(() => computePOSFunnel(batches, startMs, endMs), [batches, startMs, endMs]);
-  const liveMetrics = useMemo(() => computeLiveFunnel(sessions, startMs, endMs), [sessions, startMs, endMs]);
+  const liveMetrics = useMemo(() => computeLiveFunnel(filteredSessions, startMs, endMs), [filteredSessions, startMs, endMs]);
   
   const durationHist = useMemo(() => {
     return buildDurationHistogram(posMetrics.rawBills.map(b => (b.summary.timeEnd - b.summary.timeStart)/60000));
@@ -343,62 +352,45 @@ export function ServiceTimeAnalysis() {
          <div className="bg-[var(--color-bg-surface)] p-6 rounded-2xl border border-[var(--color-border-main)]">
             <h3 className="text-lg font-bold text-white mb-4">Top 10 Bills Nán Lâu Nhất</h3>
             <div className="overflow-x-auto custom-scrollbar">
-              <table className="w-full text-left text-sm whitespace-nowrap">
-                <thead>
-                  <tr className="border-b border-[var(--color-border-main)] text-[10px] text-[var(--color-text-muted)] uppercase tracking-wider">
-                    <th className="pb-2 pr-2">Bàn</th>
-                    <th className="pb-2 px-2">Ngày Giờ</th>
-                    <th className="pb-2 px-2">Duration</th>
-                    <th className="pb-2 px-2">Total</th>
-                    <th className="pb-2 pl-2">Thu Ngân</th>
-                  </tr>
-                </thead>
-                <tbody className="text-white">
-                  {topSlowBills.map(b => (
-                    <tr key={b.summary.transaction} className="border-b border-[var(--color-border-main)]/50">
-                      <td className="py-2 pr-2">T{String(b.summary.table).padStart(2, '0')}</td>
-                      <td className="py-2 px-2">{new Date(b.summary.timeStart).toLocaleString('vi-VN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</td>
-                      <td className="py-2 px-2 font-mono text-[var(--color-accent-orange)] text-xs">{((b.summary.timeEnd - b.summary.timeStart)/60000).toFixed(0)}p</td>
-                      <td className="py-2 px-2 text-xs">{formatCurrency(b.summary.finalTotal)}</td>
-                      <td className="py-2 pl-2 text-xs max-w-[100px] truncate">{b.summary.whoClose}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <ResponsiveTable<any>
+                data={topSlowBills}
+                columns={[
+                  { key: 'table', label: 'Bàn', render: (b) => `T${String(b.summary.table).padStart(2, '0')}`, primary: true },
+                  { key: 'datetime', label: 'Ngày Giờ', render: (b) => new Date(b.summary.timeStart).toLocaleString('vi-VN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) },
+                  { key: 'duration', label: 'Duration', render: (b) => <span className="font-mono text-[var(--color-accent-orange)] text-xs">{((b.summary.timeEnd - b.summary.timeStart)/60000).toFixed(0)}p</span> },
+                  { key: 'total', label: 'Total', render: (b) => <span className="text-xs">{formatCurrency(b.summary.finalTotal)}</span>, align: 'right' },
+                  { key: 'cashier', label: 'Thu Ngân', render: (b) => <span className="text-xs max-w-[100px] truncate block">{b.summary.whoClose}</span>, hideOnMobile: true }
+                ]}
+                keyExtractor={(b) => b.summary.transaction}
+                emptyText="Chưa có dữ liệu"
+              />
             </div>
          </div>
 
          <div className="bg-[var(--color-bg-surface)] p-6 rounded-2xl border border-[var(--color-border-main)]">
             <h3 className="text-lg font-bold text-white mb-4">Phân Tích Theo Nhân Viên <span className="ml-2 text-[8px] font-black bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded uppercase tracking-widest inline-block align-middle">POS</span></h3>
             <div className="overflow-x-auto custom-scrollbar">
-              <table className="w-full text-left text-sm whitespace-nowrap">
-                <thead>
-                  <tr className="border-b border-[var(--color-border-main)] text-[10px] text-[var(--color-text-muted)] uppercase tracking-wider">
-                    <th className="pb-2 pr-2">Nhân viên Mở</th>
-                    <th className="pb-2 px-2">Bills</th>
-                    <th className="pb-2 px-2">Avg Dur</th>
-                    <th className="pb-2 pl-2">Avg LToC</th>
-                  </tr>
-                </thead>
-                <tbody className="text-white">
-                  {staffData.map((s, i) => {
+              <ResponsiveTable<any>
+                data={staffData}
+                columns={[
+                  { key: 'staff', label: 'Nhân viên Mở', render: (s) => <span className="truncate max-w-[120px] font-bold block">{s.name}</span>, primary: true },
+                  { key: 'bills', label: 'Bills', render: (s) => s.bills, align: 'center' },
+                  { key: 'avgDur', label: 'Avg Dur', render: (s) => <span className="font-mono">{s.avgDur.toFixed(0)}p</span>, align: 'right' },
+                  { key: 'avgLToC', label: 'Avg LToC', render: (s) => {
                      const isFast = s.avgLToC < posMetrics.lastOrderToCheckoutMin.median - 5;
                      const isSlow = s.avgLToC > posMetrics.lastOrderToCheckoutMin.median + 10;
                      return (
-                        <tr key={i} className="border-b border-[var(--color-border-main)]/50">
-                          <td className="py-2 pr-2 truncate max-w-[120px] font-bold">{s.name}</td>
-                          <td className="py-2 px-2">{s.bills}</td>
-                          <td className="py-2 px-2 font-mono">{s.avgDur.toFixed(0)}p</td>
-                          <td className="py-2 pl-2 font-mono flex items-center gap-2">
-                             {s.avgLToC.toFixed(0)}p
-                             {isFast && <span className="px-1.5 bg-[var(--color-accent-green)]/20 text-[var(--color-accent-green)] text-[8px] rounded">NHANH</span>}
-                             {isSlow && <span className="px-1.5 bg-red-500/20 text-red-400 text-[8px] rounded">CHẬM</span>}
-                          </td>
-                        </tr>
-                     )
-                  })}
-                </tbody>
-              </table>
+                        <div className="font-mono flex items-center justify-end gap-2 text-sm">
+                           {s.avgLToC.toFixed(0)}p
+                           {isFast && <span className="px-1.5 bg-[var(--color-accent-green)]/20 text-[var(--color-accent-green)] text-[8px] rounded">NHANH</span>}
+                           {isSlow && <span className="px-1.5 bg-red-500/20 text-red-400 text-[8px] rounded">CHẬM</span>}
+                        </div>
+                     );
+                  }, align: 'right' }
+                ]}
+                keyExtractor={(s) => s.name}
+                emptyText="Chưa có dữ liệu nhân viên"
+              />
             </div>
          </div>
       </div>

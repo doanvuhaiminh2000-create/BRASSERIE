@@ -365,9 +365,10 @@ export function computePerTableMetrics(batches: POSBatch[], startMs: number, end
 
   return Object.entries(tableStats).map(([tableStr, stats]) => {
      const table = Number(tableStr);
+     if (stats.durations.length === 0) return null;
      const avgDur = stats.durations.reduce((a,b)=>a+b,0) / stats.durations.length;
      const avgRev = stats.totalRev / stats.count;
-     const turnsPerDayPeak = stats.peakCount / days;
+     const turnsPerDayPeak = stats.peakCount / Math.max(days, 1);
 
      return {
         table,
@@ -378,7 +379,7 @@ export function computePerTableMetrics(batches: POSBatch[], startMs: number, end
         totalRevenue: stats.totalRev,
         medianIdleGapMin: idleMap.get(table) || 0
      };
-  });
+  }).filter(Boolean) as Array<{table: number, bills: number, turnsPerDayPeak: number, avgDurationMin: number, avgRevenuePerBill: number, totalRevenue: number, medianIdleGapMin: number}>;
 }
 
 export function calculateIdleReductionROI(

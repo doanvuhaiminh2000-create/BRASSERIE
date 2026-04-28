@@ -34,14 +34,28 @@ body {
   touch-action: pan-x pan-y;
 }
 
+@media (max-width: 768px) {
+  input, select, textarea { 
+    font-size: 16px !important; 
+  }
+}
+
 button, a, [role="button"] {
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .custom-scrollbar::-webkit-scrollbar {
-  display: none;
+  width: 0;
+  height: 0;
 }
+@media (min-width: 768px) {
+  .custom-scrollbar::-webkit-scrollbar { display: none; }
+}
+
 .custom-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;

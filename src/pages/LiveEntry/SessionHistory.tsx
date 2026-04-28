@@ -1,24 +1,34 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../../store/AppContext';
-import { cn } from '../../lib/utils';
+import { cn, formatCurrency } from '../../lib/utils';
 import { Download, FileSpreadsheet } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { DateRangePicker } from '../../components/DateRangePicker';
+import { dataStore } from '../../services/dataStore';
+import { OrderSession } from '../../types';
+import { ResponsiveTable, Column } from '../../components/ui/ResponsiveTable';
 
 export function SessionHistory() {
-  const { sessions, tables, users, menu } = useApp();
+  const { tables, users, menu, isReady } = useApp();
   const [startDate, setStartDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [filteredSessions, setFilteredSessions] = useState<OrderSession[]>([]);
 
   const activeRange = useMemo(() => ({ start: startDate, end: endDate }), [startDate, endDate]);
 
-  const completedSessions = sessions.filter(s => {
-    if (s.status !== 'COMPLETED') return false;
-    const sDate = s.openedAt;
-    const startMs = new Date(activeRange.start).setHours(0,0,0,0);
-    const endMs = new Date(activeRange.end).setHours(23,59,59,999);
-    return sDate >= startMs && sDate <= endMs;
-  });
+  useEffect(() => {
+    if (!isReady) return;
+    let isMounted = true;
+    (async () => {
+      const startMs = new Date(activeRange.start).setHours(0,0,0,0);
+      const endMs = new Date(activeRange.end).setHours(23,59,59,999);
+      const data = await dataStore.getSessionsInRange(startMs, endMs);
+      if (isMounted) setFilteredSessions(data);
+    })();
+    return () => { isMounted = false; };
+  }, [activeRange, isReady]);
+
+  const completedSessions = filteredSessions.filter(s => s.status === 'COMPLETED');
 
   const getTableName = (tableId: number) => {
     return tables.find(t => t.id === tableId)?.name || `Bàn ${tableId}`;
@@ -183,6 +193,19 @@ export function SessionHistory() {
     XLSX.writeFile(workbook, `${filename}.xlsx`);
   };
 
+  const columns: Column<OrderSession>[] = [
+    { key: 'id', label: 'Mã Phiên', render: (row) => <span className="font-mono text-xs text-[var(--color-text-muted)]">{row.id.substring(0,8)}</span>, hideOnMobile: true },
+    { key: 'table', label: 'Bàn', render: (row) => <span className="font-bold text-white">{getTableName(row.tableId)}</span>, primary: true },
+    { key: 'guests', label: 'Khách', render: (row) => row.guestCount, align: 'center', hideOnMobile: true },
+    { key: 'opened', label: 'Giờ Vào', render: (row) => new Date(row.openedAt).toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'}) },
+    { key: 'closed', label: 'Giờ Ra', render: (row) => row.closedAt ? new Date(row.closedAt).toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'}) : '--:--' },
+    { key: 'total', label: 'Tổng Hoá Đơn', render: (row) => {
+        const total = row.items.filter(i => i.status !== 'CANCELED').reduce((sum, item) => sum + (item.menuItem.price * item.quantity), 0);
+        return <span className="font-mono text-[var(--color-accent-gold)]">{formatCurrency(total)}</span>;
+      }, align: 'right' },
+    { key: 'logs', label: 'Sự Kiện', render: (row) => <div className="inline-flex items-center justify-center px-2 py-1 rounded bg-[var(--color-border-main)] text-[var(--color-text-muted)]">{row.eventLogs?.length || 0}</div>, align: 'center', hideOnMobile: true }
+  ];
+
   return (
     <div className="p-8 max-w-[1600px] mx-auto animate-in fade-in duration-500">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
@@ -218,66 +241,13 @@ export function SessionHistory() {
       </div>
 
       {/* Main Table */}
-      <div className="bg-[var(--color-bg-surface)] rounded-2xl border border-[var(--color-border-main)] shadow-xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-[var(--color-border-main)]/30 border-b border-[var(--color-border-main)]">
-                <th className="px-6 py-4 text-xs font-bold text-[var(--color-text-muted)] uppercase tracking-wider">Mã Phiên</th>
-                <th className="px-6 py-4 text-xs font-bold text-[var(--color-text-muted)] uppercase tracking-wider">Bàn</th>
-                <th className="px-6 py-4 text-xs font-bold text-[var(--color-text-muted)] uppercase tracking-wider">Khách</th>
-                <th className="px-6 py-4 text-xs font-bold text-[var(--color-text-muted)] uppercase tracking-wider">Giờ Vào</th>
-                <th className="px-6 py-4 text-xs font-bold text-[var(--color-text-muted)] uppercase tracking-wider">Giờ Ra</th>
-                <th className="px-6 py-4 text-xs font-bold text-[var(--color-text-muted)] uppercase tracking-wider">Tổng Hoá Đơn</th>
-                <th className="px-6 py-4 text-xs font-bold text-[var(--color-text-muted)] uppercase tracking-wider">Số Sự Kiện (Audit)</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--color-border-main)]">
-              {completedSessions.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-6 py-20 text-center text-[var(--color-text-muted)] italic">
-                    Chưa có thông tin lịch sử phiên phục vụ nào.
-                  </td>
-                </tr>
-              ) : (
-                completedSessions.sort((a,b) => (b.closedAt || 0) - (a.closedAt || 0)).map((session) => {
-                  const total = getSessionTotal(session.items);
-                  const upsell = getUpsellRevenue(session.items);
-                  return (
-                    <tr key={session.id} className="hover:bg-white/5 transition-colors group">
-                      <td className="px-6 py-4">
-                        <span className="font-mono text-xs text-[var(--color-text-muted)] group-hover:text-[var(--color-accent-blue)] transition-colors">#{session.id.split('_')[1]}</span>
-                      </td>
-                      <td className="px-6 py-4 font-bold text-white text-lg">
-                        {getTableName(session.tableId)}
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <span className="bg-[var(--color-bg-main)] px-2 py-1 rounded text-sm text-[var(--color-text-muted)] border border-[var(--color-border-main)]">{session.guestCount}</span>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-[var(--color-text-muted)]">
-                        {new Date(session.openedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-[var(--color-text-muted)]">
-                        {session.closedAt ? new Date(session.closedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : "---"}
-                      </td>
-                      <td className="px-6 py-4">
-                        <div>
-                          <p className="font-bold text-[var(--color-accent-gold)] tracking-tight">{new Intl.NumberFormat('vi-VN').format(total)}đ</p>
-                          {upsell > 0 && <p className="text-[10px] text-[var(--color-accent-green)] font-bold uppercase">+ {new Intl.NumberFormat('vi-VN').format(upsell)} upsell</p>}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                           <span className="px-3 py-1 bg-[var(--color-border-main)]/50 rounded-full text-xs font-bold text-white border border-[var(--color-border-main)]">{session.eventLogs?.length || 0} event logs</span>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+      <div className="bg-[var(--color-bg-surface)] rounded-2xl border border-[var(--color-border-main)] shadow-xl overflow-hidden mt-8">
+        <ResponsiveTable
+          data={completedSessions.sort((a,b) => (b.closedAt || 0) - (a.closedAt || 0))}
+          columns={columns}
+          keyExtractor={(s) => s.id}
+          emptyText="Chưa có thông tin lịch sử phiên phục vụ nào."
+        />
       </div>
     </div>
   );

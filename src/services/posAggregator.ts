@@ -32,13 +32,13 @@ export const posAggregator = {
     const hourlyTraffic: Record<string, number> = {};
     const weeklyRevenue: Record<string, number> = {};
     
-    const uniqueTx = new Set<number>();
+    const uniqueTx = new Set<string>();
 
     for (const batch of batches) {
       // 1. Summaries
       for (const sumRow of batch.summary) {
         if (sumRow.timeStart >= startMs && sumRow.timeStart <= endMs) {
-          uniqueTx.add(sumRow.transaction);
+          uniqueTx.add(`${batch.batchId}_${sumRow.transaction}`);
           totalRevenue += sumRow.finalTotal;
           totalCustomers += sumRow.customer || 0;
           

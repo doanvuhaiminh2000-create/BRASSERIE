@@ -51,7 +51,13 @@ export function SessionFlow() {
       lockedAt: Date.now()
     });
 
+    // Heartbeat mỗi 5 phút
+    const heartbeat = setInterval(() => {
+      updateTable(table.id, { lockedAt: Date.now() });
+    }, 5 * 60 * 1000);
+
     return () => {
+      clearInterval(heartbeat);
       // Clear lock on unmount
       updateTable(table.id, {
         lockedBy: null,

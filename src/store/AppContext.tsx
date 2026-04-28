@@ -1,16 +1,18 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { User, Table, OrderSession, SessionItem } from '../types';
+import { Table, OrderSession, SessionItem } from '../types';
 import { MenuItemFull, POSBatch } from '../types/store';
-import { mockUsers, generateMockTables } from '../data/mockData';
-import { dataStore, db } from '../services/dataStore';
+import { generateMockTables } from '../data/mockData';
+import { dataStore } from '../services/dataStore';
+import { supabase } from '../services/supabaseClient';
+import { orderSessionFromDB, menuItemFromDB, posBatchFromDB } from '../services/mappers';
 import { normalizePosCode } from '../lib/utils';
+import { useAuth, UserProfile } from '../hooks/useAuth';
+import { auditLogger } from '../services/auditLogger';
 
 import { toast } from '../components/ui/Toast';
 
 interface AppState {
-  currentUser: User | null;
-  users: User[];
+  currentUser: UserProfile | null;
   menu: MenuItemFull[];
   tables: Table[];
   zones: string[];
@@ -21,8 +23,6 @@ interface AppState {
 }
 
 interface AppContextType extends AppState {
-  login: (userId: string, pin: string) => boolean;
-  logout: () => void;
   updateTable: (tableId: number, updates: Partial<Table>) => void;
   addTable: (table: Omit<Table, 'id' | 'status' | 'currentSessionId'>) => void;
   deleteTable: (tableId: number) => void;
@@ -48,41 +48,78 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [tablesHydrated, setTablesHydrated] = useState(false);
-  const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('brasserie_user');
-    return saved ? JSON.parse(saved) : null;
-  });
-  const [users] = useState<User[]>(mockUsers);
+  const auth = useAuth();
+  const currentUser = auth.profile;
   
   const [tables, setTables] = useState<Table[]>([]);
   const [zones, setZones] = useState<string[]>([]);
 
-  // Dexie live queries
-  const _sessions = useLiveQuery(() => db.live_sessions.toArray());
-  const _menu = useLiveQuery(() => db.menu_items.toArray());
-  const _posBatches = useLiveQuery(() => db.pos_batches.toArray());
+  const [sessions, setSessions] = useState<OrderSession[]>([]);
+  const [menu, setMenuState] = useState<MenuItemFull[]>([]);
+  const [posBatches, setPosBatches] = useState<POSBatch[]>([]);
+  const [isDataLoaded, setIsDataLoaded] = useState(false);
 
-  const sessions = _sessions || [];
-  const menu = _menu || [];
-  const posBatches = _posBatches || [];
+  const isReady = !auth.loading && tablesHydrated && (!auth.profile || isDataLoaded);
 
-  const isReady = tablesHydrated && _sessions !== undefined && _menu !== undefined && _posBatches !== undefined;
+  useEffect(() => {
+    if (!auth.profile) return;
 
-  const posAggregateByPosCode = useMemo(() => {
-    const map = new Map();
-    const menuPosCodes = new Set(menu.map(m => m.posCode));
+    let mounted = true;
+    const loadData = async () => {
+      try {
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();
+        const [
+          { data: sessionsData },
+          { data: menuData },
+          { data: batchesData }
+        ] = await Promise.all([
+          supabase.from('live_sessions').select('*').gte('opened_at', thirtyDaysAgo),
+          supabase.from('menu_items').select('*'),
+          supabase.from('pos_batches').select('*')
+        ]);
+
+        if (!mounted) return;
+
+        if (sessionsData) setSessions(sessionsData.map(orderSessionFromDB));
+        if (menuData) setMenuState(menuData.map(menuItemFromDB));
+        if (batchesData) setPosBatches(batchesData.map(posBatchFromDB));
+        
+        setIsDataLoaded(true);
+      } catch (err) {
+        console.error("Failed to load initial data", err);
+      }
+    };
     
+    loadData();
+
+    const channel = supabase.channel('app_sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'live_sessions' }, () => {
+        supabase.from('live_sessions').select('*').gte('opened_at', new Date(Date.now() - 30 * 86400000).toISOString())
+          .then(({ data }) => { if (mounted && data) setSessions(data.map(orderSessionFromDB)) });
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, () => {
+        supabase.from('menu_items').select('*')
+          .then(({ data }) => { if (mounted && data) setMenuState(data.map(menuItemFromDB)) });
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pos_batches' }, () => {
+        supabase.from('pos_batches').select('*')
+          .then(({ data }) => { if (mounted && data) setPosBatches(data.map(posBatchFromDB)) });
+      })
+      .subscribe();
+
+    return () => {
+      mounted = false;
+      supabase.removeChannel(channel);
+    };
+  }, [auth.profile]);
+
+  const posAggregateRaw = useMemo(() => {
+    const map = new Map<string, { qty: number; revenue: number; productName: string }>();
     for (const batch of posBatches) {
       for (const detail of batch.details) {
-        // Strip S3P prefix if any
         const cleanCode = normalizePosCode(detail.productId);
-        const cat = String(detail.category || '');
-        
         if (!map.has(cleanCode)) {
-          map.set(cleanCode, {
-            qty: 0, revenue: 0, productName: detail.productName,
-            isInCurrentMenu: menuPosCodes.has(cleanCode)
-          });
+          map.set(cleanCode, { qty: 0, revenue: 0, productName: detail.productName });
         }
         const cur = map.get(cleanCode)!;
         cur.qty += Number(detail.quantity) || 0;
@@ -90,7 +127,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     }
     return map;
-  }, [posBatches, menu]);
+  }, [posBatches]);
+
+  const posAggregateByPosCode = useMemo(() => {
+    const menuPosCodes = new Set(menu.map(m => m.posCode));
+    const result = new Map();
+    for (const [code, data] of posAggregateRaw) {
+      result.set(code, { ...data, isInCurrentMenu: menuPosCodes.has(code) });
+    }
+    return result;
+  }, [posAggregateRaw, menu]);
 
   // Init tables on mount
   useEffect(() => {
@@ -128,22 +174,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [tables, zones, tablesHydrated]);
 
-  // Auth
-  const login = (userId: string, pin: string) => {
-    const user = users.find(u => u.id === userId && u.pin === pin);
-    if (user) {
-      setCurrentUser(user);
-      localStorage.setItem('brasserie_user', JSON.stringify(user));
-      return true;
-    }
-    return false;
-  };
-
-  const logout = () => {
-    setCurrentUser(null);
-    localStorage.removeItem('brasserie_user');
-  };
-
   // Table Logic
   const updateTable = (tableId: number, updates: Partial<Table>) => {
     setTables(prev => prev.map(t => t.id === tableId ? { ...t, ...updates } : t));
@@ -154,14 +184,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const maxId = prev.length > 0 ? Math.max(...prev.map(t => t.id)) : 0;
       return [...prev, { ...table, id: maxId + 1, status: 'TRONG', currentSessionId: null }];
     });
+    auditLogger.log('Thêm bàn mới', { name: table.name, zone: table.zone });
   };
 
   const deleteTable = (tableId: number) => {
     setTables(prev => prev.filter(t => t.id !== tableId));
+    auditLogger.log('Xóa bàn', { tableId });
   };
 
   const addZone = (name: string) => {
     setZones(prev => prev.includes(name) ? prev : [...prev, name]);
+    auditLogger.log('Thêm khu vực', { name });
   };
 
   const deleteZone = (name: string, deleteTables: boolean = false) => {
@@ -173,11 +206,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // Better to move them to the first available zone if any
       setTables(prev => prev.map(t => t.zone === name ? { ...t, zone: zones.find(z => z !== name) || 'Mặc Định' } : t));
     }
+    auditLogger.log('Xóa khu vực', { name, deleteTables });
   };
 
   const renameZone = (oldName: string, newName: string) => {
     setZones(prev => prev.map(z => z === oldName ? newName : z));
     setTables(prev => prev.map(t => t.zone === oldName ? { ...t, zone: newName } : t));
+    auditLogger.log('Đổi tên khu vực', { oldName, newName });
   };
 
   // Session Management
@@ -230,30 +265,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const addItem = async (tableId: number, item: MenuItemFull, isUpsold: boolean = false) => {
     if (!item?.posCode) return;
-    
-    await db.transaction('rw', db.live_sessions, async () => {
-      const session = await db.live_sessions.where({ tableId, status: 'ACTIVE' }).first();
+    try {
+      const session = sessions.find(s => s.tableId === tableId && s.status === 'ACTIVE');
       if (!session) return;
 
-      const items = session.items || [];
-      const existingIndex = items.findIndex(i => 
-        i.status === 'PENDING' && i.menuItem?.posCode === item.posCode && i.isUpsold === isUpsold
-      );
-
-      let newItems: SessionItem[];
-      if (existingIndex >= 0) {
-        newItems = items.map((it, idx) => idx === existingIndex ? { ...it, quantity: (it.quantity || 0) + 1 } : it);
-      } else {
-        const newItem: SessionItem = {
-          id: `item_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-          menuItem: item as any,
-          quantity: 1,
-          isUpsold,
-          status: 'PENDING',
-          round: session.currentRound || 1
-        };
-        newItems = [...items, newItem];
-      }
+      const newItem = {
+        id: `item_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+        menuItem: item,
+        quantity: 1,
+        isUpsold,
+        status: 'PENDING',
+        round: session.currentRound || 1
+      };
 
       const newLog = {
         id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
@@ -264,170 +287,231 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         details: `Thêm món/Tăng SL: ${item.displayName}`
       };
 
-      await db.live_sessions.update(session.id, {
-        items: newItems,
-        eventLogs: [...(session.eventLogs || []), newLog]
+      const { error } = await supabase.rpc('add_pending_item', {
+        p_session_id: session.id,
+        p_item: newItem,
+        p_log: newLog
       });
-    });
+
+      if (error) throw error;
+    } catch (err) {
+      console.error(err);
+      toast.error("Lỗi thêm món");
+    }
   };
 
   const updatePendingItemQty = async (tableId: number, itemId: string, delta: number) => {
-    await db.transaction('rw', db.live_sessions, async () => {
-      const session = await db.live_sessions.where({ tableId, status: 'ACTIVE' }).first();
+    try {
+      const session = sessions.find(s => s.tableId === tableId && s.status === 'ACTIVE');
       if (!session) return;
 
-      const newItems = session.items.map(i => {
-        if (i.id === itemId && i.status === 'PENDING') {
-          return { ...i, quantity: Math.max(1, i.quantity + delta) };
-        }
-        return i;
+      const { error } = await supabase.rpc('update_pending_item_qty', {
+        p_session_id: session.id,
+        p_item_id: itemId,
+        p_delta: delta
       });
-
-      await db.live_sessions.update(session.id, { items: newItems });
-    });
+      if (error) throw error;
+    } catch (err) {
+      console.error(err);
+      toast.error("Lỗi cập nhật số lượng món");
+    }
   };
 
   const removePendingItem = async (tableId: number, itemId: string) => {
-    await db.transaction('rw', db.live_sessions, async () => {
-      const session = await db.live_sessions.where({ tableId, status: 'ACTIVE' }).first();
+    try {
+      const session = sessions.find(s => s.tableId === tableId && s.status === 'ACTIVE');
       if (!session) return;
-      const newItems = session.items.filter(i => !(i.id === itemId && i.status === 'PENDING'));
-      await db.live_sessions.update(session.id, { items: newItems });
-    });
+
+      const { error } = await supabase.rpc('remove_pending_item', {
+        p_session_id: session.id,
+        p_item_id: itemId
+      });
+      if (error) throw error;
+    } catch (err) {
+      console.error(err);
+      toast.error("Lỗi xóa món");
+    }
   };
 
   const sendRoundToKitchen = async (tableId: number) => {
-    const session = getActiveSessionByTable(tableId);
-    if (!session) return;
+    try {
+      const session = sessions.find(s => s.tableId === tableId && s.status === 'ACTIVE');
+      if (!session) return;
 
-    const pendingCount = session.items.filter(i => i.status === 'PENDING').length;
-    if (pendingCount === 0) return;
+      const pendingCount = session.items.filter(i => i.status === 'PENDING').length;
+      if (pendingCount === 0) return;
 
-    const updatedItems = session.items.map(i => i.status === 'PENDING' ? { ...i, status: 'SENT' as const, sentAt: Date.now() } : i);
-    const newLog = {
-      id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-      time: Date.now(),
-      staffId: currentUser?.id || 'UNKNOWN',
-      staffName: currentUser?.name || 'UNKNOWN',
-      action: 'SEND_KITCHEN',
-      details: `Gửi ${pendingCount} món vào bếp lần ${session.currentRound}`
-    };
+      const newLog = {
+        id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+        time: Date.now(),
+        staffId: currentUser?.id || 'UNKNOWN',
+        staffName: currentUser?.name || 'UNKNOWN',
+        action: 'SEND_KITCHEN',
+        details: `Gửi ${pendingCount} món vào bếp lần ${session.currentRound}`
+      };
 
-    await updateSession(session.id, {
-      items: updatedItems,
-      currentRound: session.currentRound + 1,
-      eventLogs: [...(session.eventLogs || []), newLog]
-    });
-    updateTable(tableId, { status: 'DANG_PHUC_VU' });
+      const { error } = await supabase.rpc('send_round_to_kitchen', {
+        p_session_id: session.id,
+        p_log: newLog,
+        p_sent_at: Date.now()
+      });
+      
+      if (error) throw error;
+      updateTable(tableId, { status: 'DANG_PHUC_VU' });
+    } catch (error) {
+      console.error(error);
+      toast.error('Có lỗi xảy ra, vui lòng thử lại');
+    }
   };
 
   const serveItem = async (tableId: number, itemId: string) => {
-    const session = getActiveSessionByTable(tableId);
-    if (!session) return;
+    try {
+      const session = sessions.find(s => s.tableId === tableId && s.status === 'ACTIVE');
+      if (!session) return;
 
-    const item = session.items.find(i => i.id === itemId);
-    if (!item) return;
+      const item = session.items.find(i => i.id === itemId);
+      if (!item) return;
 
-    const updatedItems = session.items.map(i => i.id === itemId ? { ...i, status: 'SERVED' as const } : i);
-    const newLog = {
-      id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-      time: Date.now(),
-      staffId: currentUser?.id || 'UNKNOWN',
-      staffName: currentUser?.name || 'UNKNOWN',
-      action: 'SERVE_ITEM',
-      details: `Phục vụ món: ${item.menuItem.displayName}`,
-      targetItemId: itemId
-    };
+      const newLog = {
+        id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+        time: Date.now(),
+        staffId: currentUser?.id || 'UNKNOWN',
+        staffName: currentUser?.name || 'UNKNOWN',
+        action: 'SERVE_ITEM',
+        details: `Phục vụ món: ${item.menuItem.displayName}`,
+        targetItemId: itemId
+      };
 
-    await updateSession(session.id, {
-      items: updatedItems,
-      eventLogs: [...(session.eventLogs || []), newLog]
-    });
+      const { error } = await supabase.rpc('serve_item', {
+        p_session_id: session.id,
+        p_item_id: itemId,
+        p_log: newLog,
+        p_served_at: Date.now()
+      });
+
+      if (error) throw error;
+    } catch (error) {
+      console.error(error);
+      toast.error('Có lỗi xảy ra, vui lòng thử lại');
+    }
   };
 
   const cancelItem = async (tableId: number, itemId: string, reason: string) => {
-    const session = getActiveSessionByTable(tableId);
-    if (!session) return;
-    
-    const item = session.items.find(i => i.id === itemId);
-    if (!item) return;
+    try {
+      const session = sessions.find(s => s.tableId === tableId && s.status === 'ACTIVE');
+      if (!session) return;
+      
+      const item = session.items.find(i => i.id === itemId);
+      if (!item) return;
 
-    const updatedItems = session.items.map(i => i.id === itemId ? { ...i, status: 'CANCELED' as const, cancelReason: reason } : i);
-    const newLog = {
-       id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-       time: Date.now(),
-       staffId: currentUser?.id || 'UNKNOWN',
-       staffName: currentUser?.name || 'UNKNOWN',
-       action: 'CANCEL_ITEM',
-       details: `Hủy món ${item.menuItem.displayName}. Lý do: ${reason}`
-    };
-    await updateSession(session.id, { items: updatedItems, eventLogs: [...(session.eventLogs || []), newLog] });
+      const newLog = {
+         id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+         time: Date.now(),
+         staffId: currentUser?.id || 'UNKNOWN',
+         staffName: currentUser?.name || 'UNKNOWN',
+         action: 'CANCEL_ITEM',
+         details: `Hủy món ${item.menuItem.displayName}. Lý do: ${reason}`
+      };
+
+      const { error } = await supabase.rpc('cancel_item', {
+        p_session_id: session.id,
+        p_item_id: itemId,
+        p_reason: reason,
+        p_log: newLog
+      });
+
+      if (error) throw error;
+    } catch (error) {
+      console.error(error);
+      toast.error('Có lỗi xảy ra, vui lòng thử lại');
+    }
   };
 
   const recordUpsellAttempt = async (tableId: number, attempt: { menuItemId: string, result: 'TC' | 'TChối', reason?: string }) => {
-    const session = getActiveSessionByTable(tableId);
-    if (!session) return;
+    try {
+      const session = sessions.find(s => s.tableId === tableId && s.status === 'ACTIVE');
+      if (!session) return;
 
-    const item = menu.find(m => m.posCode === attempt.menuItemId);
-    const newAttempt = {
-      id: `attempt_${Date.now()}`,
-      staffId: currentUser?.id || 'UNKNOWN',
-      staffName: currentUser?.name || 'UNKNOWN',
-      menuItemId: attempt.menuItemId,
-      result: attempt.result,
-      reason: attempt.reason,
-      timestamp: Date.now()
-    };
-    const newLog = {
-       id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-       time: Date.now(),
-       staffId: currentUser?.id || 'UNKNOWN',
-       staffName: currentUser?.name || 'UNKNOWN',
-       action: 'UPSELL_ATTEMPT',
-       details: `Gợi ý ${item?.displayName || 'món'}: ${attempt.result === 'TC' ? 'Thành công' : 'Từ chối (' + attempt.reason + ')'}`
-    };
-    await updateSession(session.id, {
-      upsellAttempts: [...(session.upsellAttempts || []), newAttempt],
-      eventLogs: [...(session.eventLogs || []), newLog]
-    });
+      const item = menu.find(m => m.posCode === attempt.menuItemId);
+      const newAttempt = {
+        id: `attempt_${Date.now()}`,
+        staffId: currentUser?.id || 'UNKNOWN',
+        staffName: currentUser?.name || 'UNKNOWN',
+        menuItemId: attempt.menuItemId,
+        result: attempt.result,
+        reason: attempt.reason,
+        timestamp: Date.now()
+      };
+
+      const newLog = {
+         id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+         time: Date.now(),
+         staffId: currentUser?.id || 'UNKNOWN',
+         staffName: currentUser?.name || 'UNKNOWN',
+         action: 'UPSELL_ATTEMPT',
+         details: `Gợi ý ${item?.displayName || 'món'}: ${attempt.result === 'TC' ? 'Thành công' : 'Từ chối (' + attempt.reason + ')'}`
+      };
+
+      const { error } = await supabase.rpc('record_upsell_attempt', {
+        p_session_id: session.id,
+        p_attempt: newAttempt,
+        p_log: newLog
+      });
+
+      if (error) throw error;
+    } catch (error) {
+      console.error(error);
+      toast.error('Có lỗi xảy ra, vui lòng thử lại');
+    }
   };
 
   const checkoutSession = async (tableId: number, paymentMethod: 'Tiền Mặt' | 'Thẻ NCB' | 'VietQR' | 'Voucher') => {
-    const session = getActiveSessionByTable(tableId);
-    if (!session) return;
-    
-    const hasUnservedItems = session.items.some(i => i.status === 'PENDING' || i.status === 'SENT');
-    if (hasUnservedItems) {
-      toast.error('Không thể thanh toán: Bàn vẫn còn món chưa phục vụ xong!');
-      return;
+    try {
+      const session = sessions.find(s => s.tableId === tableId && s.status === 'ACTIVE');
+      if (!session) return;
+      
+      const newLog = {
+        id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+        time: Date.now(),
+        staffId: currentUser?.id || 'UNKNOWN',
+        staffName: currentUser?.name || 'UNKNOWN',
+        action: 'CHECKOUT',
+        details: `Thanh toán bằng ${paymentMethod}`
+      };
+
+      const { error } = await supabase.rpc('checkout_session', {
+        p_session_id: session.id,
+        p_payment_method: paymentMethod,
+        p_log: newLog,
+        p_closed_at: Date.now()
+      });
+
+      if (error) throw error;
+
+      updateTable(tableId, { status: 'TRONG', currentSessionId: null, lockedBy: null, lockedAt: null });
+    } catch (error: any) {
+      console.error(error);
+      if (error.message?.includes('unserved')) {
+        toast.error('Không thể thanh toán: Bàn vẫn còn món chưa phục vụ xong!');
+      } else {
+        toast.error('Có lỗi xảy ra, vui lòng thử lại');
+      }
     }
-    
-    const newLog = {
-      id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-      time: Date.now(),
-      staffId: currentUser?.id || 'UNKNOWN',
-      staffName: currentUser?.name || 'UNKNOWN',
-      action: 'CHECKOUT',
-      details: `Thanh toán bằng ${paymentMethod}`
-    };
-
-    await updateSession(session.id, {
-      status: 'COMPLETED',
-      closedAt: Date.now(),
-      paymentMethod,
-      eventLogs: [...(session.eventLogs || []), newLog]
-    } as Partial<OrderSession>);
-
-    updateTable(tableId, { status: 'TRONG', currentSessionId: null, lockedBy: null, lockedAt: null });
   };
 
   const setMenu = async (newMenu: MenuItemFull[]) => {
     await dataStore.saveMenuItems(newMenu);
   };
 
+  const toggleMenuItemActive = async (id: string) => {
+    const item = menu.find(m => m.posCode === id);
+    if (!item) return;
+    await dataStore.toggleMenuItemStatus(item.posCode, !item.isActive);
+  };
+
   const clearMenu = async () => {
     try {
-      await db.menu_items.clear();
+      await dataStore.clearMenuItems();
       toast.success("Đã xóa toàn bộ menu thành công!");
     } catch (error) {
       console.error("Clear menu error:", error);
@@ -435,19 +519,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const toggleMenuItemActive = async (id: string) => {
-    const item = menu.find(m => m.posCode === id);
-    if (!item) return;
-    // We update item in dexie
-    await db.menu_items.update(item.posCode, { isActive: !item.isActive });
-  };
-
   const value = useMemo(() => ({
-    currentUser, users, menu, tables, zones, sessions, isReady, posBatches, posAggregateByPosCode,
-    login, logout, updateTable, addTable, deleteTable, addZone, deleteZone, renameZone, createSession, updateSession, 
+    currentUser, menu, tables, zones, sessions, isReady, posBatches, posAggregateByPosCode,
+    updateTable, addTable, deleteTable, addZone, deleteZone, renameZone, createSession, updateSession, 
     addItem, updatePendingItemQty, removePendingItem, sendRoundToKitchen, serveItem, cancelItem, recordUpsellAttempt, checkoutSession,
     setMenu, clearMenu, toggleMenuItemActive
-  }), [currentUser, users, menu, tables, zones, sessions, isReady, posBatches, posAggregateByPosCode, clearMenu, setMenu, toggleMenuItemActive, addTable, deleteTable, addZone, deleteZone, renameZone]);
+  }), [currentUser, menu, tables, zones, sessions, isReady, posBatches, posAggregateByPosCode, clearMenu, setMenu, toggleMenuItemActive, addTable, deleteTable, addZone, deleteZone, renameZone]);
 
   return (
     <AppContext.Provider value={value}>

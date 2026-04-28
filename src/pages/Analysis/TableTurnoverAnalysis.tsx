@@ -13,6 +13,7 @@ import {
 } from '../../services/operationsAnalytics';
 import { Database, AlertTriangle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { ResponsiveTable } from '../../components/ui/ResponsiveTable';
 import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, ReferenceLine, Cell, BarChart, Bar } from 'recharts';
 
 function KPICard({ title, value, subtitle, color, source }: { title: string; value: string | number; subtitle?: string; color: string; source?: 'POS' | 'LIVE' | 'POS+LIVE' }) {
@@ -400,34 +401,26 @@ export function TableTurnoverAnalysis() {
          <div className="bg-[var(--color-bg-surface)] p-6 rounded-2xl border border-[var(--color-border-main)] flex flex-col">
             <h3 className="text-lg font-bold text-white mb-4">Chi Tiết Từng Bàn <span className="ml-2 text-[8px] font-black bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded uppercase tracking-widest inline-block align-middle">POS</span></h3>
             <div className="flex-1 overflow-x-auto overflow-y-auto custom-scrollbar max-h-[400px]">
-              <table className="w-full text-left text-sm whitespace-nowrap">
-                <thead className="sticky top-0 bg-[var(--color-bg-surface)] z-10">
-                  <tr className="border-b border-[var(--color-border-main)] text-[10px] text-[var(--color-text-muted)] uppercase tracking-wider">
-                    <th className="pb-2 pr-2">Bàn</th>
-                    <th className="pb-2 px-2">Bills</th>
-                    <th className="pb-2 px-2">Turns/Peak</th>
-                    <th className="pb-2 px-2">Idle Gap</th>
-                    <th className="pb-2 pl-2 text-right">Tổng DOANH THU</th>
-                  </tr>
-                </thead>
-                <tbody className="text-white">
-                  {[...perTableData].sort((a,b)=> b.totalRevenue - a.totalRevenue).map((t, idx) => {
+              <ResponsiveTable
+                data={[...perTableData].sort((a,b)=> b.totalRevenue - a.totalRevenue)}
+                columns={[
+                  { key: 'table', label: 'Bàn', render: (t) => {
+                     const idx = [...perTableData].sort((a,b)=> b.totalRevenue - a.totalRevenue).indexOf(t);
                      const isTop = idx < 3;
                      const isBadGap = t.medianIdleGapMin > 40;
-                     return (
-                        <tr key={t.table} className={cn("border-b border-[var(--color-border-main)]/50", isTop && "bg-[var(--color-accent-gold)]/5", isBadGap && "bg-red-500/5")}>
-                          <td className="py-2 pr-2 font-black">
-                            <span className={cn("inline-block w-full border-l-2 pl-2", isTop ? "border-[var(--color-accent-gold)]" : isBadGap ? "border-red-500" : "border-transparent")}>T{String(t.table).padStart(2,'0')}</span>
-                          </td>
-                          <td className="py-2 px-2">{t.bills}</td>
-                          <td className="py-2 px-2">{t.turnsPerDayPeak.toFixed(1)}</td>
-                          <td className={cn("py-2 px-2 font-mono", isBadGap ? "text-red-400 font-bold" : "")}>{t.medianIdleGapMin.toFixed(0)}p</td>
-                          <td className="py-2 pl-2 text-right text-[var(--color-accent-gold)] font-bold">{formatCurrency(t.totalRevenue)}</td>
-                        </tr>
-                     )
-                  })}
-                </tbody>
-              </table>
+                     return <span className={cn("inline-block w-full border-l-[3px] pl-2 font-black", isTop ? "border-[var(--color-accent-gold)] text-[var(--color-accent-gold)]" : isBadGap ? "border-red-500 text-red-400" : "border-transparent text-white")}>T{String(t.table).padStart(2,'0')}</span>;
+                  }, primary: true },
+                  { key: 'bills', label: 'Bills', render: (t) => t.bills, align: 'center' },
+                  { key: 'turns', label: 'Turns/Peak', render: (t) => t.turnsPerDayPeak.toFixed(1), align: 'center' },
+                  { key: 'idle', label: 'Idle Gap', render: (t) => {
+                     const isBadGap = t.medianIdleGapMin > 40;
+                     return <span className={cn("font-mono", isBadGap ? "text-red-400 font-bold" : "")}>{t.medianIdleGapMin.toFixed(0)}p</span>;
+                  }, align: 'right' },
+                  { key: 'revenue', label: 'Tổng DOANH THU', render: (t) => <span className="text-[var(--color-accent-gold)] font-bold">{formatCurrency(t.totalRevenue)}</span>, align: 'right' }
+                ]}
+                keyExtractor={(t) => t.table}
+                emptyText="Chưa có dữ liệu chi tiết bàn"
+              />
             </div>
          </div>
       </div>

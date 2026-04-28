@@ -66,6 +66,7 @@ export interface SessionItem {
   round: number;
   cancelReason?: string;
   sentAt?: number;
+  servedAt?: number;
 }
 
 export interface UpsellAttempt {

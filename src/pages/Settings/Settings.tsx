@@ -1,12 +1,47 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useApp } from '../../store/AppContext';
-import { dataStore } from '../../services/dataStore';
+import { dataStore, db } from '../../services/dataStore';
+import { migrateLocalData } from '../../utils/migrateLocalData';
 import { toast } from '../../components/ui/Toast';
 import { confirmModal } from '../../components/ui/ConfirmModal';
-import { Database, AlertTriangle } from 'lucide-react';
+import { auditLogger } from '../../services/auditLogger';
+import { Database, AlertTriangle, CloudUpload } from 'lucide-react';
 
 export function Settings() {
   const { clearMenu } = useApp();
+  const [hasLocalData, setHasLocalData] = useState(false);
+  const [isMigrating, setIsMigrating] = useState(false);
+
+  useEffect(() => {
+    const checkLocal = async () => {
+      try {
+        const batchCount = await db.pos_batches.count();
+        const sessionCount = await db.live_sessions.count();
+        const menuCount = await db.menu_items.count();
+        setHasLocalData(batchCount > 0 || sessionCount > 0 || menuCount > 0);
+      } catch (err) {
+        console.error("Dexie db check error", err);
+      }
+    };
+    checkLocal();
+  }, []);
+
+  const handleMigrate = async () => {
+    const ok = await confirmModal({
+      title: 'Chuyển đổi dữ liệu lên Cloud',
+      message: 'Hệ thống sẽ đồng bộ toàn bộ dữ liệu từ trình duyệt này lên máy chủ Supabase. Khi thành công, dữ liệu local sẽ bị xóa. Tiếp tục?',
+      confirmText: 'Bắt Đầu Đồng Bộ'
+    });
+    if (!ok) return;
+
+    setIsMigrating(true);
+    await migrateLocalData();
+    setIsMigrating(false);
+    setHasLocalData(false);
+    
+    // Hard reload to fetch new data
+    window.location.reload();
+  };
 
   const handleClearAllData = async () => {
     const ok = await confirmModal({
@@ -21,6 +56,7 @@ export function Settings() {
         await dataStore.clearPOSBatches();
         await dataStore.clearSessions();
         await clearMenu();
+        await auditLogger.log('Xoá toàn bộ dữ liệu (Hard Reset)');
         toast.success("Đã xóa toàn bộ dữ liệu thành công. Làm mới lại trang để bắt đầu.");
         setTimeout(() => {
           window.location.reload();
@@ -42,6 +78,7 @@ export function Settings() {
     if (ok) {
       try {
         await dataStore.clearPOSBatches();
+        await auditLogger.log('Xoá toàn bộ dữ liệu POS file');
         toast.success("Đã xóa dữ liệu POS.");
       } catch (err) {
         toast.error("Lỗi xóa POS.");
@@ -59,6 +96,7 @@ export function Settings() {
     if (ok) {
       try {
         await dataStore.clearSessions();
+        await auditLogger.log('Xoá toàn bộ lịch sử Live Sessions');
         toast.success("Đã xóa lịch sử Live.");
       } catch (err) {
         toast.error("Lỗi xóa Live.");
@@ -76,6 +114,29 @@ export function Settings() {
       </div>
       
       <div className="bg-[var(--color-bg-surface)] p-6 rounded-2xl border border-[var(--color-border-main)] flex-1 overflow-y-auto">
+        
+        {hasLocalData && (
+          <div className="mb-8 p-6 border border-emerald-500/30 bg-emerald-500/10 rounded-xl">
+            <div className="flex gap-3 mb-4 text-emerald-400">
+              <CloudUpload className="w-6 h-6 shrink-0" />
+              <div>
+                <h3 className="font-semibold text-lg">Đồng Bộ Dữ Liệu Cũ (Migration)</h3>
+                <p className="text-sm opacity-80 mt-1 text-emerald-100">
+                  Hệ thống phát hiện có dữ liệu cũ chưa được đồng bộ trên trình duyệt. Hãy chạy để lưu lên máy chủ Supabase.
+                </p>
+              </div>
+            </div>
+            
+            <button 
+              onClick={handleMigrate}
+              disabled={isMigrating}
+              className="px-6 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold rounded-lg transition-colors disabled:opacity-50"
+            >
+              {isMigrating ? 'Đang Xử Lý...' : 'Chuyển Đổi Dữ Liệu (Migrate)'}
+            </button>
+          </div>
+        )}
+
         <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
           <Database className="w-5 h-5" />
           Quản Lý Dữ Liệu (Reset)

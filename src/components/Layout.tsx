@@ -1,19 +1,23 @@
-import React from 'react';
+import { useState } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useApp } from '../store/AppContext';
+import { useAuth } from '../hooks/useAuth';
 import { ClockWidget } from './ClockWidget';
 import { useBreakpoint } from '../hooks/useBreakpoint';
 import { 
   LayoutDashboard, Database, Zap, Target, Clock, 
-  RotateCw, ChefHat, ClipboardList, Users, Settings, LogOut, FileSpreadsheet
+  RotateCw, ChefHat, ClipboardList, Users, Settings, LogOut, FileSpreadsheet,
+  Menu, X
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export function Layout() {
-  const { currentUser, logout } = useApp();
+  const { currentUser } = useApp();
+  const { signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const { isDesktop } = useBreakpoint();
+  const { isDesktop, isMobile } = useBreakpoint();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const isLiveEntry = location.pathname.startsWith('/live-entry');
 
@@ -53,6 +57,7 @@ export function Layout() {
       title: "Cấu Hình",
       items: [
         { name: "Quản Lý Menu", path: "/menu-management", icon: ClipboardList, roles: ['admin', 'manager'] },
+        { name: "Quản Lý Người Dùng", path: "/user-management", icon: Users, roles: ['admin'] },
         { name: "Cài Đặt Hệ Thống", path: "/settings", icon: Settings, roles: ['admin'] },
       ]
     }
@@ -60,18 +65,47 @@ export function Layout() {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[var(--color-bg-main)] text-[var(--color-text-main)] font-sans">
+      
+      {/* Mobile header */}
+      {!hideSidebar && isMobile && (
+        <div className="md:hidden fixed top-0 inset-x-0 h-14 bg-[var(--color-bg-surface)] border-b border-[var(--color-border-main)] z-30 flex items-center px-4">
+          <button onClick={() => setSidebarOpen(true)} className="p-2 -ml-2 text-[var(--color-text-main)]">
+            <Menu className="w-5 h-5" />
+          </button>
+          <h1 className="ml-2 font-semibold text-white tracking-tight">BRASSERIE Ops</h1>
+        </div>
+      )}
+
+      {/* Sidebar Overlay for Mobile */}
+      {!hideSidebar && isMobile && sidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black/60 z-40 md:hidden transition-opacity" 
+          onClick={() => setSidebarOpen(false)} 
+        />
+      )}
+
       {/* Sidebar */}
       {!hideSidebar && (
-        <aside className="w-64 border-r border-[var(--color-border-main)] bg-[var(--color-bg-surface)] flex flex-col shrink-0">
-          <div className="p-6 border-b border-[var(--color-border-main)]">
+        <aside className={cn(
+          "w-64 border-r border-[var(--color-border-main)] bg-[var(--color-bg-surface)] flex flex-col shrink-0",
+          isMobile && "fixed inset-y-0 left-0 z-50 transition-transform duration-300",
+          isMobile && !sidebarOpen && "-translate-x-full",
+          !isMobile && "relative translate-x-0"
+        )}>
+          <div className="p-6 border-b border-[var(--color-border-main)] flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-[var(--color-accent-gold)] rounded-lg flex items-center justify-center font-bold text-black shrink-0">
                 B
               </div>
               <h1 className="text-xl font-semibold tracking-tight text-white truncate">
-                BRASSERIE Ops
+                 Ops
               </h1>
             </div>
+            {isMobile && (
+              <button onClick={() => setSidebarOpen(false)} className="text-[var(--color-text-muted)] p-1">
+                <X className="w-5 h-5" />
+              </button>
+            )}
           </div>
           
           <nav className="flex-1 p-4 overflow-y-auto custom-scrollbar">
@@ -89,6 +123,9 @@ export function Layout() {
                       <NavLink
                         key={item.path}
                         to={item.path}
+                        onClick={() => {
+                          if (isMobile) setSidebarOpen(false);
+                        }}
                         className={({ isActive }) => cn(
                           "flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors cursor-pointer text-sm font-medium",
                           isActive 
@@ -113,7 +150,7 @@ export function Layout() {
                 <p className="text-[10px] text-[var(--color-text-muted)] uppercase mt-0.5">{currentUser?.role}</p>
               </div>
               <button 
-                onClick={() => { logout(); navigate('/'); }}
+                onClick={async () => { await signOut(); navigate('/'); }}
                 className="p-2 text-[var(--color-text-muted)] hover:text-[var(--color-accent-red)] transition-colors rounded-lg hover:bg-[var(--color-border-main)]"
                 title="Đăng xuất"
               >
@@ -127,7 +164,8 @@ export function Layout() {
       {/* Main Content Area */}
       <main className={cn(
         "flex-1 flex flex-col h-full overflow-hidden relative",
-        isLiveEntry && !isDesktop && currentUser?.role === 'staff' && "max-w-md mx-auto shadow-2xl"
+        isLiveEntry && !isDesktop && currentUser?.role === 'staff' && "max-w-md mx-auto shadow-2xl",
+        isMobile && !hideSidebar && "pt-14"
       )}>
         {/* Header - shown mainly for Staff view or quick info */}
         {currentUser?.role === 'staff' && (
@@ -141,7 +179,7 @@ export function Layout() {
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium text-[var(--color-text-muted)]">{currentUser?.name}</span>
                 <button 
-                  onClick={() => { logout(); navigate('/'); }}
+                  onClick={async () => { await signOut(); navigate('/'); }}
                   className="p-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-accent-red)] transition-colors rounded-md hover:bg-[var(--color-border-main)]"
                 >
                   <LogOut className="w-4 h-4" />
