@@ -1,31 +1,22 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { ChefHat, Flame, Timer, CheckCircle, Database } from 'lucide-react';
 import { useApp } from '../../store/AppContext';
 import { DateRangePicker } from '../../components/DateRangePicker';
 import { sessionAnalytics, KitchenMetrics } from '../../services/sessionAnalytics';
-import { dataStore } from '../../services/dataStore';
-import { OrderSession } from '../../types';
 
 export function KitchenAnalysis() {
-  const { isReady } = useApp();
+  const { sessions, isReady } = useApp();
   const [startDate, setStartDate] = useState<string>(new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [filteredSessions, setFilteredSessions] = useState<OrderSession[]>([]);
 
   const activeRange = useMemo(() => ({ start: startDate, end: endDate }), [startDate, endDate]);
 
-  useEffect(() => {
-    if (!isReady) return;
-    let isMounted = true;
-    (async () => {
-      const startMs = new Date(activeRange.start).setHours(0,0,0,0);
-      const endMs = new Date(activeRange.end).setHours(23,59,59,999);
-      const data = await dataStore.getSessionsInRange(startMs, endMs);
-      if (isMounted) setFilteredSessions(data);
-    })();
-    return () => { isMounted = false; };
-  }, [activeRange, isReady]);
+  const filteredSessions = useMemo(() => {
+    const startMs = new Date(activeRange.start).setHours(0,0,0,0);
+    const endMs = new Date(activeRange.end).setHours(23,59,59,999);
+    return (sessions || []).filter(s => s.openedAt >= startMs && s.openedAt <= endMs);
+  }, [sessions, activeRange]);
 
   const metrics = useMemo<KitchenMetrics>(() => {
     return sessionAnalytics.getKitchenMetrics(filteredSessions);

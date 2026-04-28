@@ -5,7 +5,6 @@ import { useApp } from '../../store/AppContext';
 import { DateRangePicker } from '../../components/DateRangePicker';
 import { useNavigate } from 'react-router-dom';
 import { AnalysisSkeleton } from '../../components/ui/Skeleton';
-import { ResponsiveTable } from '../../components/ui/ResponsiveTable';
 
 // --- Shared Types & Helpers ---
 interface ProcessedItem {
@@ -567,42 +566,52 @@ export function MenuAnalysis() {
               />
             </div>
           </div>
-          <div className="mt-4">
-            <ResponsiveTable<any>
-              data={displayData.filter(m => m.displayNameEN.toLowerCase().includes(searchTerm.toLowerCase()) || m.posCode.toLowerCase().includes(searchTerm.toLowerCase())).sort((a, b) => b.revenue - a.revenue)}
-              columns={[
-                { key: 'item', label: 'Món', render: (row) => (
-                    <div>
+          <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
+            <table className="w-full text-left text-sm whitespace-nowrap">
+              <thead className="sticky top-0 bg-[var(--color-bg-surface)] border-b border-[var(--color-border-main)] text-[10px] uppercase text-[var(--color-text-muted)] tracking-wider">
+                <tr>
+                  <th className="p-4 font-bold">Món</th>
+                  <th className="p-4 font-bold text-right">Giá</th>
+                  <th className="p-4 font-bold text-right">Cost</th>
+                  <th className="p-4 font-bold text-right">Margin %</th>
+                  <th className="p-4 font-bold text-right">Lượt Bán / Ngày</th>
+                  <th className="p-4 font-bold text-right">Doanh Thu</th>
+                  <th className="p-4 font-bold text-center">Phân Loại</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--color-border-main)]">
+                {displayData.filter(m => m.displayNameEN.toLowerCase().includes(searchTerm.toLowerCase()) || m.posCode.toLowerCase().includes(searchTerm.toLowerCase())).sort((a, b) => b.revenue - a.revenue).map(row => (
+                  <tr key={row.posCode} className="hover:bg-white/5 transition-colors">
+                    <td className="p-4">
                       <div className="font-bold text-white max-w-[250px] truncate" title={row.displayNameEN}>{row.displayNameEN}</div>
                       <div className="text-[10px] text-[var(--color-text-muted)] font-mono">{row.posCode} {row.isGhost && <span className="text-amber-500 ml-2">(Legacy)</span>}</div>
-                    </div>
-                ), primary: true },
-                { key: 'price', label: 'Giá', render: (row) => <span className="text-[var(--color-text-muted)]">{row.price.toLocaleString()}</span>, align: 'right', hideOnMobile: true },
-                { key: 'cost', label: 'Cost', render: (row) => (
-                    <span className={cn(row.hasRecipeCost ? "text-white tabular-nums" : "text-amber-500 tabular-nums font-bold")}>{row.hasRecipeCost ? row.cost!.toLocaleString() : "—"}</span>
-                ), align: 'right', hideOnMobile: true },
-                { key: 'margin', label: 'Margin %', render: (row) => {
-                    if (row.hasRecipeCost && row.marginPct !== null) {
-                        return <span className="text-[var(--color-accent-gold)] tabular-nums font-bold">{row.marginPct.toFixed(1)}%</span>;
-                    }
-                    return <span className="text-[var(--color-text-muted)] tabular-nums font-bold text-xs">Chưa có cost</span>;
-                }, align: 'right' },
-                { key: 'qty', label: 'Lượt Bán / Ngày', render: (row) => <span className="text-white font-bold">{row.qtyPerDay} <span className="font-normal text-xs text-[var(--color-text-muted)]">({row.qty})</span></span>, align: 'right' },
-                { key: 'revenue', label: 'Doanh Thu', render: (row) => <span className="font-mono text-[var(--color-accent-green)]">{row.revenue.toLocaleString()}</span>, align: 'right' },
-                { key: 'category', label: 'Phân Loại', render: (row) => {
-                    if (row.quad !== 'NoData') {
-                        return (
-                          <span className="text-[10px] font-black uppercase px-2 py-1 rounded border inline-block text-center whitespace-nowrap" style={{color: getCategoryColor(row.quad), borderColor: getCategoryColor(row.quad)}}>
-                            {row.quad}
-                          </span>
-                        );
-                    }
-                    return <span className="text-[10px] text-[var(--color-text-muted)]">-</span>;
-                }, align: 'center', hideOnMobile: true }
-              ]}
-              keyExtractor={(row) => row.posCode}
-              emptyText="Không tìm thấy món nào"
-            />
+                    </td>
+                    <td className="p-4 text-right text-[var(--color-text-muted)]">{row.price.toLocaleString()}</td>
+                    <td className="p-4 text-right tabular-nums">
+                      <span className={cn(row.hasRecipeCost ? "text-white" : "text-amber-500 font-bold")}>{row.hasRecipeCost ? row.cost!.toLocaleString() : "—"}</span>
+                    </td>
+                    <td className="p-4 text-right tabular-nums font-bold text-[var(--color-accent-gold)]">
+                      {row.hasRecipeCost && row.marginPct !== null ? (
+                        <span className="text-[var(--color-accent-gold)]">{row.marginPct.toFixed(1)}%</span>
+                      ) : (
+                        <span className="text-[var(--color-text-muted)] text-xs">Chưa có cost</span>
+                      )}
+                    </td>
+                    <td className="p-4 text-right text-white font-bold">{row.qtyPerDay} <span className="font-normal text-xs text-[var(--color-text-muted)]">({row.qty})</span></td>
+                    <td className="p-4 text-right font-mono text-[var(--color-accent-green)]">{row.revenue.toLocaleString()}</td>
+                    <td className="p-4 text-center">
+                       {row.quad !== 'NoData' ? (
+                         <span className="text-[10px] font-black uppercase px-2 py-1 rounded border" style={{color: getCategoryColor(row.quad), borderColor: getCategoryColor(row.quad)}}>
+                           {row.quad}
+                         </span>
+                       ) : (
+                         <span className="text-[10px] text-[var(--color-text-muted)]">-</span>
+                       )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

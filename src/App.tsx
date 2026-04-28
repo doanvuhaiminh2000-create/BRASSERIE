@@ -16,7 +16,6 @@ import { KitchenAnalysis } from './pages/Analysis/KitchenAnalysis';
 import { MenuAnalysis } from './pages/Analysis/MenuAnalysis';
 import { StaffAnalysis } from './pages/Analysis/StaffAnalysis';
 import { MenuManagement } from './pages/MenuManagement/MenuManagement';
-import { UserManagement } from './pages/UserManagement/UserManagement';
 
 import { ToastContainer, toast } from './components/ui/Toast';
 import { ConfirmModalContainer } from './components/ui/ConfirmModal';
@@ -26,18 +25,14 @@ import { Settings as SettingsPage } from './pages/Settings/Settings';
 
 // Placeholder Auth Guard
 const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactNode, allowedRoles?: string[] }) => {
-  const { currentUser, isReady } = useApp();
-  
-  if (!isReady) return null; // hoặc spinner
+  const { currentUser } = useApp();
   if (!currentUser) return <Navigate to="/" replace />;
-  if (currentUser.role === 'pending') return <Navigate to="/" replace />;
   if (allowedRoles && !allowedRoles.includes(currentUser.role)) return <Navigate to="/" replace />;
-  
   return <>{children}</>;
 };
 
 export default function App() {
-  const { currentUser, isReady } = useApp();
+  const { currentUser } = useApp();
 
   React.useEffect(() => {
     if (!window.indexedDB) {
@@ -61,12 +56,7 @@ export default function App() {
       <ToastContainer />
       <ConfirmModalContainer />
       <Routes>
-        <Route path="/" element={
-          !isReady ? null : 
-          (currentUser && currentUser.role !== 'pending') ? 
-            <Navigate to={currentUser.role === 'staff' ? "/live-entry" : "/dashboard"} replace /> : 
-            <Login />
-        } />
+        <Route path="/" element={currentUser ? <Navigate to={currentUser.role === 'staff' ? "/live-entry" : "/dashboard"} replace /> : <Login />} />
         
         <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
           <Route path="/dashboard" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><Dashboard /></ProtectedRoute>} />
@@ -82,8 +72,7 @@ export default function App() {
           <Route path="/analysis/menu" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><MenuAnalysis /></ProtectedRoute>} />
           <Route path="/analysis/staff" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><StaffAnalysis /></ProtectedRoute>} />
           <Route path="/menu-management" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><MenuManagement /></ProtectedRoute>} />
-          <Route path="/user-management" element={<ProtectedRoute allowedRoles={['admin']}><UserManagement /></ProtectedRoute>} />
-          <Route path="/settings" element={<ProtectedRoute allowedRoles={['admin']}><SettingsPage /></ProtectedRoute>} />
+          <Route path="/settings" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><SettingsPage /></ProtectedRoute>} />
         </Route>
       </Routes>
     </>

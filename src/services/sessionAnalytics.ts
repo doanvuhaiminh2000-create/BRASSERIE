@@ -156,14 +156,17 @@ export const sessionAnalytics = {
       items.forEach(item => {
         if (!item.sentAt) return;
         let cookTime: number | null = null;
-        if (item.status === 'SERVED' && item.servedAt) {
-          cookTime = item.servedAt - item.sentAt;
+        if (item.status === 'SERVED') {
+          // Find logic: nearest SERVE_ITEM log after sentAt for this item
+          const serveLog = logs.find(l => l.action === 'SERVE_ITEM' && l.time >= item.sentAt! && l.targetItemId === item.id);
+          if (serveLog) {
+            cookTime = serveLog.time - item.sentAt;
+          }
+        } else if (item.status === 'SENT') {
+          cookTime = Date.now() - item.sentAt;
         }
 
         if (cookTime !== null) {
-          // Cap at 60 mins (60 * 60000 = 3600000 ms)
-          if (cookTime > 3600000) return;
-
           const station = item.menuItem?.station || 'N';
           if (!stationMap[station]) stationMap[station] = { totalTime: 0, count: 0 };
           stationMap[station].totalTime += cookTime;

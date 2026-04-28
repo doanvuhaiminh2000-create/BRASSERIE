@@ -5,9 +5,7 @@ import { cn } from '../../lib/utils';
 import { toast } from '../../components/ui/Toast';
 import { confirmModal } from '../../components/ui/ConfirmModal';
 import { parseMenuMapping, parseMenuRecipe } from '../../services/menuMatcher';
-import { auditLogger } from '../../services/auditLogger';
 import { MenuItemFull } from '../../types/store';
-import { ResponsiveTable } from '../../components/ui/ResponsiveTable';
 
 export function MenuManagement() {
   const { menu, setMenu, clearMenu, toggleMenuItemActive } = useApp();
@@ -43,7 +41,6 @@ export function MenuManagement() {
       let warning = errors.length > 0 ? `Có ${errors.length} dòng bị bỏ qua do thiếu Tên/Mã POS.` : "";
 
       await setMenu(items);
-      auditLogger.log('Tải danh sách Menu (Mapping)', { file: file.name, itemsCount: items.length });
       setUploadStatus('success');
       setErrorMsg(warning || "Tải lên thành công!");
 
@@ -85,7 +82,6 @@ export function MenuManagement() {
       }
 
       await setMenu(updatedMenu);
-      auditLogger.log('Tải định lượng Cost (Recipe)', { file: file.name, matched });
       setRecipeUploadStatus('success');
       setRecipeErrorMsg(warning || `Đã liên kết giá cost thành công ${matched} món!`);
 
@@ -120,7 +116,6 @@ export function MenuManagement() {
           costUpdatedAt: Date.now()
         };
         await setMenu(newMenu);
-        auditLogger.log('Ghép thủ công Định lượng Cost', { recipeName: u.recipeName, menuName: menuDisplayNameEN, cost: u.cost });
         toast.success(`Đã cập nhật cost: ${menuDisplayNameEN}`);
       } else {
         toast.error(`Lỗi: Không tìm thấy món '${menuDisplayNameEN}' trong Menu.`);
@@ -194,7 +189,6 @@ export function MenuManagement() {
                      });
                      if (ok) {
                        clearMenu();
-                       auditLogger.log('Xóa toàn bộ Menu');
                      }
                    }}
                    className="flex items-center gap-2 px-6 py-3 bg-[var(--color-bg-surface)] border border-[var(--color-accent-red)] text-[var(--color-accent-red)] font-bold rounded-xl hover:bg-[var(--color-accent-red)] hover:text-white transition-all cursor-pointer shadow-lg active:scale-95"
@@ -255,40 +249,52 @@ export function MenuManagement() {
               </select>
             </div>
 
-            <div className="mt-4">
-              <ResponsiveTable<MenuItemFull>
-                data={filteredMenu}
-                columns={[
-                  { key: 'idx', label: 'STT', render: (item) => <span className="text-[var(--color-text-muted)]">{filteredMenu.indexOf(item) + 1}</span>, align: 'center', hideOnMobile: true },
-                  { key: 'section', label: 'Section / Category', render: (item) => (
-                    <div>
-                      <div>{item.section}</div>
-                      <div className="text-[10px] text-[var(--color-text-muted)] uppercase tracking-wider">{item.category}</div>
-                    </div>
-                  ) },
-                  { key: 'name', label: 'Tên Món (EN/VN)', render: (item) => (
-                    <div>
-                      <div className="text-[var(--color-accent-gold)] font-bold">{item.displayNameEN}</div>
-                      <div className="text-xs text-white font-normal">{item.displayName}</div>
-                    </div>
-                  ), primary: true },
-                  { key: 'price', label: 'Giá VAT (VND)', render: (item) => <span className="tabular-nums text-white">{(item.price).toLocaleString('vi-VN')}</span>, align: 'right' },
-                  { key: 'pos', label: 'Mã POS', render: (item) => <span className="font-mono text-[var(--color-text-muted)]">{item.posCode}</span>, hideOnMobile: true },
-                  { key: 'status', label: 'Trạng Thái', render: (item) => (
-                    <button 
-                      onClick={() => toggleMenuItemActive(item.posCode)}
-                      className={cn(
-                        "px-3 py-1 rounded-full text-[10px] font-bold transition-all uppercase tracking-wider whitespace-nowrap",
-                        item.isActive ? "bg-[var(--color-accent-green)]/20 text-[var(--color-accent-green)]" : "bg-[var(--color-border-main)] text-[var(--color-text-muted)]"
-                      )}
-                    >
-                      {item.isActive ? 'Bật' : 'Tắt'}
-                    </button>
-                  ), align: 'center' }
-                ]}
-                keyExtractor={(item) => item.posCode}
-                emptyText="Không tìm thấy món nào phù hợp."
-              />
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse min-w-[1000px]">
+                <thead>
+                  <tr className="bg-[var(--color-bg-main)] text-[var(--color-text-muted)] text-xs uppercase tracking-wider border-b border-[var(--color-border-main)]">
+                    <th className="p-4">STT</th>
+                    <th className="p-4">Section / Category</th>
+                    <th className="p-4">Tên Món (EN/VN)</th>
+                    <th className="p-4 text-right">Giá VAT (VND)</th>
+                    <th className="p-4">Mã POS</th>
+                    <th className="p-4 text-center">Trạng Thái</th>
+                  </tr>
+                </thead>
+                <tbody className="text-sm">
+                  {filteredMenu.map((item, idx) => (
+                    <tr key={item.posCode} className="border-b border-[var(--color-border-main)] hover:bg-white/5 transition-colors">
+                      <td className="p-4 text-[var(--color-text-muted)]">{idx + 1}</td>
+                      <td className="p-4 text-white font-medium">
+                        <div>{item.section}</div>
+                        <div className="text-[10px] text-[var(--color-text-muted)] uppercase tracking-wider">{item.category}</div>
+                      </td>
+                      <td className="p-4 text-[var(--color-accent-gold)] font-bold">
+                        <div>{item.displayNameEN}</div>
+                        <div className="text-xs text-white font-normal">{item.displayName}</div>
+                      </td>
+                      <td className="p-4 text-right tabular-nums text-white">{(item.price).toLocaleString('vi-VN')}</td>
+                      <td className="p-4 font-mono text-[var(--color-text-muted)]">{item.posCode}</td>
+                      <td className="p-4 text-center">
+                        <button 
+                          onClick={() => toggleMenuItemActive(item.posCode)}
+                          className={cn(
+                            "px-3 py-1 rounded-full text-[10px] font-bold transition-all uppercase tracking-wider",
+                            item.isActive ? "bg-[var(--color-accent-green)]/20 text-[var(--color-accent-green)]" : "bg-[var(--color-border-main)] text-[var(--color-text-muted)]"
+                          )}
+                        >
+                          {item.isActive ? 'Bật' : 'Tắt'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {filteredMenu.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="p-8 text-center text-[var(--color-text-muted)]">Không tìm thấy món nào phù hợp.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
@@ -327,7 +333,6 @@ export function MenuManagement() {
                          costUpdatedAt: undefined
                        }));
                        await setMenu(clearedMenu);
-                       auditLogger.log('Xóa dữ liệu Định lượng (Cost)');
                        toast.success("Đã xóa toàn bộ dữ liệu định lượng (Cost)");
                      }
                    }}
@@ -365,18 +370,25 @@ export function MenuManagement() {
                 Những món này trong file Định lượng không có tên chính xác hoặc không đủ độ tương đồng với Menu Online. Vui lòng chọn món tương ứng từ Menu hoặc bỏ qua nếu món này không còn bán.
               </p>
               
-              <div className="mt-4">
-                <ResponsiveTable<any>
-                  data={unmatchedRecipes}
-                  columns={[
-                    { key: 'name', label: 'Tên trong Định lượng', render: (u) => <span className="text-white font-medium">{u.recipeName}</span>, primary: true },
-                    { key: 'cost', label: 'Mức Cost (VND)', render: (u) => <span className="text-[var(--color-accent-blue)] font-bold tabular-nums">{u.cost.toLocaleString('vi-VN')}</span>, align: 'right' },
-                    { key: 'select', label: 'Gợi ý & Chọn món', render: (u) => {
-                      const i = unmatchedRecipes.indexOf(u);
-                      return (
-                          <div className="flex flex-col sm:flex-row gap-2">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-amber-500/10 text-amber-500 text-xs uppercase tracking-wider border-b border-amber-500/30">
+                      <th className="p-3">Tên trong Định lượng</th>
+                      <th className="p-3 text-right">Mức Cost (VND)</th>
+                      <th className="p-3">Gợi ý & Chọn món</th>
+                      <th className="p-3 text-center">Hành động</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-sm">
+                    {unmatchedRecipes.map((u, i) => (
+                      <tr key={i} className="border-b border-amber-500/10 hover:bg-white/5 transition-colors">
+                        <td className="p-3 text-white font-medium">{u.recipeName}</td>
+                        <td className="p-3 text-right text-[var(--color-accent-blue)] font-bold">{u.cost.toLocaleString('vi-VN')}</td>
+                        <td className="p-3">
+                          <div className="flex gap-2">
                             <select 
-                              className="bg-[var(--color-bg-surface)] text-white text-xs px-3 py-2 rounded-lg border border-[var(--color-border-main)] focus:border-amber-500 outline-none flex-1 max-w-full sm:max-w-[200px]"
+                              className="bg-[var(--color-bg-surface)] text-white text-xs px-3 py-2 rounded-lg border border-[var(--color-border-main)] focus:border-amber-500 outline-none flex-1 max-w-[200px]"
                               onChange={(e) => {
                                 const newUnmatched = [...unmatchedRecipes];
                                 newUnmatched[i].selectedMatch = e.target.value;
@@ -384,13 +396,13 @@ export function MenuManagement() {
                               }}
                               value={u.selectedMatch || ""}
                             >
-                              <option value="" disabled>-- Chọn món --</option>
-                              <optgroup label="✨ Gợi ý">
+                              <option value="" disabled>-- Chọn món tương ứng --</option>
+                              <optgroup label="✨ Món có tên gần giống">
                                 {u.suggestions.map(s => (
                                   <option value={s} key={s}>★ {s}</option>
                                 ))}
                               </optgroup>
-                              <optgroup label="Menu Online">
+                              <optgroup label="Tất cả món trong Menu Online">
                                 {menu.map(m => (
                                   <option key={m.posCode} value={m.displayNameEN}>{m.displayNameEN}</option>
                                 ))}
@@ -399,29 +411,25 @@ export function MenuManagement() {
                             {u.selectedMatch && (
                               <button 
                                 onClick={() => handleManualMatch(i, u.selectedMatch!)}
-                                className="px-3 py-1.5 bg-amber-500 text-black font-bold rounded-lg text-xs hover:bg-amber-400 transition-colors whitespace-nowrap"
+                                className="px-3 py-1.5 bg-amber-500 text-black font-bold rounded-lg text-xs hover:bg-amber-400 transition-colors"
                               >
                                 Xác nhận
                               </button>
                             )}
                           </div>
-                      );
-                    } },
-                    { key: 'action', label: 'Hành động', render: (u) => {
-                      const i = unmatchedRecipes.indexOf(u);
-                      return (
+                        </td>
+                        <td className="p-3 text-center">
                           <button 
                             onClick={() => skipUnmatched(i)}
-                            className="px-4 py-1.5 bg-white/5 hover:bg-white/10 text-[var(--color-text-muted)] hover:text-white rounded-lg text-xs font-bold transition-colors whitespace-nowrap"
+                            className="px-4 py-1.5 bg-white/5 hover:bg-white/10 text-[var(--color-text-muted)] hover:text-white rounded-lg text-xs font-bold transition-colors"
                           >
                             Bỏ qua
                           </button>
-                      );
-                    }, align: 'center' }
-                  ]}
-                  keyExtractor={(u) => `${u.recipeName}-${unmatchedRecipes.indexOf(u)}`}
-                  emptyText="Không có dữ liệu"
-                />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
@@ -434,26 +442,45 @@ export function MenuManagement() {
           </div>
 
           <div className="bg-[var(--color-bg-surface)] border border-[var(--color-border-main)] rounded-2xl shadow-xl overflow-hidden">
-            <div className="mt-4">
-              <ResponsiveTable<MenuItemFull>
-                data={menu}
-                columns={[
-                  { key: 'name', label: 'Tên Món (EN)', render: (item) => <span className="text-white font-medium">{item.displayNameEN}</span>, primary: true },
-                  { key: 'price', label: 'Giá Bán', render: (item) => <span className="tabular-nums text-white">{(item.price).toLocaleString('vi-VN')}</span>, align: 'right' },
-                  { key: 'cost', label: 'Mức Cost (VND)', render: (item) => {
-                     const isCostLoaded = item.cost !== undefined && item.cost > 0;
-                     return <span className={cn("tabular-nums font-bold", isCostLoaded ? "text-[var(--color-accent-blue)]" : "text-[var(--color-text-muted)]")}>{isCostLoaded ? item.cost!.toLocaleString('vi-VN') : 'N/A'}</span>;
-                  }, align: 'right' },
-                  { key: 'source', label: 'Nguồn Cost', render: (item) => <span className="text-[10px] text-[var(--color-text-muted)] uppercase tracking-widest font-mono">{item.costSource || 'N/A'}</span>, align: 'right', hideOnMobile: true },
-                  { key: 'margin', label: 'Margin (%)', render: (item) => {
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse min-w-[1000px]">
+                <thead>
+                  <tr className="bg-[var(--color-bg-main)] text-[var(--color-text-muted)] text-xs uppercase tracking-wider border-b border-[var(--color-border-main)]">
+                    <th className="p-4">Tên Món (EN)</th>
+                    <th className="p-4 text-right">Giá Bán</th>
+                    <th className="p-4 text-right">Mức Cost (VND)</th>
+                    <th className="p-4 text-right">Nguồn Cost</th>
+                    <th className="p-4 text-center">Margin (%)</th>
+                  </tr>
+                </thead>
+                <tbody className="text-sm">
+                  {menu.map(item => {
                      const isCostLoaded = item.cost !== undefined && item.cost > 0;
                      const margin = isCostLoaded ? ((item.price - item.cost!) / item.price) * 100 : 0;
-                     return <span className={cn("tabular-nums font-bold", isCostLoaded ? (margin > 60 ? "text-[var(--color-accent-green)]" : "text-[var(--color-accent-gold)]") : "text-[var(--color-text-muted)]")}>{isCostLoaded ? `${margin.toFixed(1)}%` : '-'}</span>;
-                  }, align: 'center' }
-                ]}
-                keyExtractor={(item) => item.posCode}
-                emptyText="Chưa có thông tin menu. Vui lòng tải tab Mapping trước."
-              />
+                     
+                     return (
+                       <tr key={item.posCode} className="border-b border-[var(--color-border-main)] hover:bg-white/5 transition-colors">
+                         <td className="p-4 text-white font-medium">{item.displayNameEN}</td>
+                         <td className="p-4 text-right tabular-nums text-white">{(item.price).toLocaleString('vi-VN')}</td>
+                         <td className={cn("p-4 text-right tabular-nums font-bold", isCostLoaded ? "text-[var(--color-accent-blue)]" : "text-[var(--color-text-muted)]")}>
+                           {isCostLoaded ? item.cost!.toLocaleString('vi-VN') : 'N/A'}
+                         </td>
+                         <td className="p-4 text-right text-[10px] text-[var(--color-text-muted)] uppercase tracking-widest font-mono">
+                           {item.costSource || 'N/A'}
+                         </td>
+                         <td className={cn("p-4 text-center tabular-nums font-bold", isCostLoaded ? (margin > 60 ? "text-[var(--color-accent-green)]" : "text-[var(--color-accent-gold)]") : "text-[var(--color-text-muted)]")}>
+                           {isCostLoaded ? `${margin.toFixed(1)}%` : '-'}
+                         </td>
+                       </tr>
+                     );
+                  })}
+                  {menu.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="p-8 text-center text-[var(--color-text-muted)]">Chưa có thông tin menu. Vui lòng tải tab Mapping trước.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>

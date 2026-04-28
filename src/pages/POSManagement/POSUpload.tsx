@@ -4,9 +4,7 @@ import { cn, formatCurrency } from '../../lib/utils';
 import { parseExcelPOSBatch } from '../../lib/posDataParser';
 import { useApp } from '../../store/AppContext';
 import { dataStore } from '../../services/dataStore';
-import { auditLogger } from '../../services/auditLogger';
 import { POSBatch } from '../../types/store';
-import { ResponsiveTable, Column } from '../../components/ui/ResponsiveTable';
 
 import { confirmModal } from '../../components/ui/ConfirmModal';
 
@@ -99,8 +97,6 @@ export function POSUpload() {
 
       await dataStore.addPOSBatch(parsedBatch);
       
-      auditLogger.log('Tải dữ liệu POS', { batchId, dateFrom, dateTo, file: file.name });
-      
       setUploadStatus('success');
       loadBatches();
       
@@ -125,7 +121,6 @@ export function POSUpload() {
     });
     if (ok) {
       await dataStore.deletePOSBatch(batchId);
-      auditLogger.log('Xoá dữ liệu POS', { batchId });
       loadBatches();
     }
   };
@@ -151,14 +146,14 @@ export function POSUpload() {
               <div className="space-y-6">
                 <div>
                    <label className="block text-xs font-semibold text-[var(--color-text-muted)] uppercase mb-2">Khoảng thời gian dữ liệu *</label>
-                   <div className="flex flex-col sm:flex-row sm:items-center gap-3 bg-[var(--color-bg-main)] p-3 rounded-xl border border-[var(--color-border-main)]">
+                   <div className="flex items-center gap-3 bg-[var(--color-bg-main)] p-3 rounded-xl border border-[var(--color-border-main)]">
                       <input 
                         type="date"
                         value={dateFrom}
                         onChange={(e) => setDateFrom(e.target.value)}
                         className="flex-1 bg-transparent border-none text-white focus:ring-0 outline-none cursor-pointer [color-scheme:dark]"
                       />
-                      <span className="text-[var(--color-text-muted)] hidden sm:inline">→</span>
+                      <span className="text-[var(--color-text-muted)]">→</span>
                       <input 
                         type="date"
                         value={dateTo}
@@ -246,26 +241,44 @@ export function POSUpload() {
                <span className="text-xs font-normal text-[var(--color-text-muted)] bg-white/5 py-1 px-3 rounded-full">Tổng: {batches.length} batch</span>
              </h3>
 
-             <div className="mt-4">
-                <ResponsiveTable<POSBatch>
-                  data={batches}
-                  columns={[
-                    { key: 'id', label: 'ID', render: (row) => <span className="text-[10px] font-mono text-[var(--color-text-muted)]">{row.batchId.split('_').pop()}</span>, hideOnMobile: true },
-                    { key: 'date', label: 'Khoảng TG', render: (row) => `${new Date(row.dateFrom).toLocaleDateString('vi-VN')} - ${new Date(row.dateTo).toLocaleDateString('vi-VN')}`, primary: true },
-                    { key: 'file', label: 'Tên file gốc', render: (row) => <span className="text-xs truncate max-w-[150px] inline-block" title={row.fileName}>{row.fileName}</span>, hideOnMobile: true },
-                    { key: 'txs', label: 'Giao dịch', render: (row) => <span className="font-mono text-[var(--color-accent-blue)]">{row.totalTransactions.toLocaleString()}</span>, align: 'right' },
-                    { key: 'revenue', label: 'Doanh thu', render: (row) => <span className="font-mono text-[var(--color-accent-gold)]">{formatCurrency(row.totalRevenue)}</span>, align: 'right' },
-                    { key: 'staff', label: 'Nhân viên', render: (row) => <span className="text-[var(--color-text-muted)] text-xs">{row.uploadedBy}</span>, hideOnMobile: true },
-                    { key: 'dateUp', label: 'Ngày Up', render: (row) => <span className="text-[var(--color-text-muted)] text-[10px]">{new Date(row.uploadedAt).toLocaleString('vi-VN')}</span>, hideOnMobile: true },
-                    { key: 'actions', label: 'Hành động', render: (row) => (
-                      <button onClick={() => handleDeleteBatch(row.batchId)} className="p-1.5 text-red-400 hover:bg-red-400/20 rounded transition-colors" title="Xóa">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    ), align: 'right' }
-                  ]}
-                  keyExtractor={(b) => b.batchId}
-                  emptyText="Kho dữ liệu trống. Vui lòng tải file mẫu lên."
-                />
+             <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                  <thead className="text-[10px] uppercase text-[var(--color-text-muted)] bg-[var(--color-bg-main)]">
+                    <tr>
+                      <th className="px-4 py-3 font-black tracking-widest rounded-tl-lg">ID</th>
+                      <th className="px-4 py-3 font-black tracking-widest">Khoảng TG</th>
+                      <th className="px-4 py-3 font-black tracking-widest">Tên file gốc</th>
+                      <th className="px-4 py-3 font-black tracking-widest text-right">Giao dịch</th>
+                      <th className="px-4 py-3 font-black tracking-widest text-right">Doanh thu</th>
+                      <th className="px-4 py-3 font-black tracking-widest">Nhân viên</th>
+                      <th className="px-4 py-3 font-black tracking-widest">Ngày Up</th>
+                      <th className="px-4 py-3 font-black tracking-widest text-right rounded-tr-lg">Hành động</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {batches.map((b) => (
+                      <tr key={b.batchId} className="border-b border-[var(--color-border-main)] last:border-0 hover:bg-[var(--color-bg-main)]/50 transition-colors">
+                        <td className="px-4 py-3 text-[10px] font-mono text-[var(--color-text-muted)]">{b.batchId.split('_').pop()}</td>
+                        <td className="px-4 py-3 text-white font-medium">{new Date(b.dateFrom).toLocaleDateString('vi-VN')} - {new Date(b.dateTo).toLocaleDateString('vi-VN')}</td>
+                        <td className="px-4 py-3 text-white text-xs truncate max-w-[150px]" title={b.fileName}>{b.fileName}</td>
+                        <td className="px-4 py-3 text-right font-mono text-[var(--color-accent-blue)]">{b.totalTransactions.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-right font-mono text-[var(--color-accent-gold)]">{formatCurrency(b.totalRevenue)}</td>
+                        <td className="px-4 py-3 text-[var(--color-text-muted)] text-xs">{b.uploadedBy}</td>
+                        <td className="px-4 py-3 text-[var(--color-text-muted)] text-[10px]">{new Date(b.uploadedAt).toLocaleString('vi-VN')}</td>
+                        <td className="px-4 py-3 text-right">
+                           <button onClick={() => handleDeleteBatch(b.batchId)} className="p-1.5 text-red-400 hover:bg-red-400/20 rounded transition-colors" title="Xóa">
+                             <Trash2 className="w-4 h-4" />
+                           </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {batches.length === 0 && (
+                      <tr>
+                        <td colSpan={8} className="px-6 py-8 text-center text-[var(--color-text-muted)] italic text-xs">Kho dữ liệu trống. Vui lòng tải file mẫu lên.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
              </div>
            </div>
         )}

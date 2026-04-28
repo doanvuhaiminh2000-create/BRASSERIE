@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, 
   PieChart, Pie, Cell 
@@ -8,9 +8,6 @@ import { formatCurrency, cn } from '../../lib/utils';
 import { useApp } from '../../store/AppContext';
 import { DateRangePicker } from '../../components/DateRangePicker';
 import { sessionAnalytics, UpsellMetrics } from '../../services/sessionAnalytics';
-import { dataStore } from '../../services/dataStore';
-import { OrderSession } from '../../types';
-import { ResponsiveTable, Column } from '../../components/ui/ResponsiveTable';
 
 const PIE_COLORS = [
   'var(--color-accent-blue)', 
@@ -21,24 +18,17 @@ const PIE_COLORS = [
 ];
 
 export function UpsellAnalysis() {
-  const { isReady } = useApp();
+  const { sessions, isReady } = useApp();
   const [startDate, setStartDate] = useState<string>(new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [filteredSessions, setFilteredSessions] = useState<OrderSession[]>([]);
 
   const activeRange = useMemo(() => ({ start: startDate, end: endDate }), [startDate, endDate]);
 
-  useEffect(() => {
-    if (!isReady) return;
-    let isMounted = true;
-    (async () => {
-      const startMs = new Date(activeRange.start).setHours(0,0,0,0);
-      const endMs = new Date(activeRange.end).setHours(23,59,59,999);
-      const data = await dataStore.getSessionsInRange(startMs, endMs);
-      if (isMounted) setFilteredSessions(data);
-    })();
-    return () => { isMounted = false; };
-  }, [activeRange, isReady]);
+  const filteredSessions = useMemo(() => {
+    const startMs = new Date(activeRange.start).setHours(0,0,0,0);
+    const endMs = new Date(activeRange.end).setHours(23,59,59,999);
+    return (sessions || []).filter(s => s.openedAt >= startMs && s.openedAt <= endMs);
+  }, [sessions, activeRange]);
 
   const metrics = useMemo<UpsellMetrics>(() => {
     return sessionAnalytics.getUpsellMetrics(filteredSessions);
@@ -56,28 +46,6 @@ export function UpsellAnalysis() {
     return (Object.entries(metrics.reasonMap) as [string, number][]).map(([name, value]) => ({ name, value }))
       .sort((a,b) => b.value - a.value);
   }, [metrics.reasonMap]);
-
-  const columns: Column<any>[] = [
-    { key: 'staff', label: 'Nhân Viên', primary: true, render: (row) => (
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-lg bg-[var(--color-bg-main)] border border-[var(--color-border-main)] flex items-center justify-center font-bold text-[var(--color-text-muted)] text-sm group-hover:bg-[var(--color-accent-gold)] group-hover:text-black transition-colors">
-          {row.staffName.substring(0, 2).toUpperCase()}
-        </div>
-        <p className="font-medium text-white">{row.staffName}</p>
-      </div>
-    )},
-    { key: 'attempts', label: 'Lượt Tư Vấn', align: 'center', render: (row) => <span className="font-mono text-[var(--color-text-main)]">{row.attempts}</span>, hideOnMobile: true },
-    { key: 'rate', label: 'Tỷ Lệ Win', align: 'right', render: (row) => (
-      <span className={`px-2.5 py-1 rounded-full text-xs font-semibold
-        ${row.rate >= 35 ? 'bg-[var(--color-accent-green)]/10 text-[var(--color-accent-green)] border border-[var(--color-accent-green)]/20' : 
-          row.rate >= 20 ? 'bg-[var(--color-accent-gold)]/10 text-[var(--color-accent-gold)] border border-[var(--color-accent-gold)]/20' : 
-          'bg-[var(--color-accent-red)]/10 text-[var(--color-accent-red)] border border-[var(--color-accent-red)]/20'}
-      `}>
-        {row.rate.toFixed(1)}%
-      </span>
-    )},
-    { key: 'revenue', label: 'Doanh Thu Upsell', align: 'right', render: (row) => <span className="font-bold text-[var(--color-accent-gold)]">{formatCurrency(row.revenue)}</span> }
-  ];
 
   if (!isReady) return null;
 
@@ -192,17 +160,55 @@ export function UpsellAnalysis() {
       </div>
 
       {/* Table: Staff Stats */}
-      <div className="bg-[var(--color-bg-surface)] border border-[var(--color-border-main)] rounded-2xl overflow-hidden shadow-sm mt-8">
+      <div className="bg-[var(--color-bg-surface)] border border-[var(--color-border-main)] rounded-2xl overflow-hidden shadow-sm">
         <div className="p-6 border-b border-[var(--color-border-main)] py-4">
           <h3 className="font-semibold text-white uppercase tracking-wider text-sm">Bảng Xếp Hạng Hiệu Quả Tư Vấn</h3>
         </div>
-        <div className="mt-4 pb-4">
-          <ResponsiveTable
-            data={metrics.staffLeaderboard}
-            columns={columns}
-            keyExtractor={(s) => s.staffName}
-            emptyText="Chưa có dữ liệu tư vấn món"
-          />
+        <div className="overflow-x-auto custom-scrollbar">
+          <table className="w-full text-left border-collapse min-w-[700px]">
+            <thead>
+              <tr className="bg-[var(--color-bg-main)]/50">
+                <th className="p-4 border-b border-[var(--color-border-main)] text-[var(--color-text-muted)] font-medium text-xs uppercase tracking-widest">Nhân Viên</th>
+                <th className="p-4 border-b border-[var(--color-border-main)] text-[var(--color-text-muted)] font-medium text-xs uppercase tracking-widest text-center">Lượt Tư Vấn</th>
+                <th className="p-4 border-b border-[var(--color-border-main)] text-[var(--color-text-muted)] font-medium text-xs uppercase tracking-widest text-right">Tỷ Lệ Win</th>
+                <th className="p-4 border-b border-[var(--color-border-main)] text-[var(--color-text-muted)] font-medium text-xs uppercase tracking-widest text-right">Doanh Thu Upsell</th>
+              </tr>
+            </thead>
+            <tbody>
+              {metrics.staffLeaderboard.map((staff, idx) => (
+                <tr key={idx} className="hover:bg-[var(--color-border-main)]/20 transition-colors group">
+                  <td className="p-4 border-b border-[var(--color-border-main)]/50">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-[var(--color-bg-main)] border border-[var(--color-border-main)] flex items-center justify-center font-bold text-[var(--color-text-muted)] text-sm group-hover:bg-[var(--color-accent-gold)] group-hover:text-black transition-colors">
+                        {staff.staffName.substring(0, 2).toUpperCase()}
+                      </div>
+                      <p className="font-medium text-white">{staff.staffName}</p>
+                    </div>
+                  </td>
+                  <td className="p-4 border-b border-[var(--color-border-main)]/50 text-center font-mono text-[var(--color-text-main)]">
+                    {staff.attempts}
+                  </td>
+                  <td className="p-4 border-b border-[var(--color-border-main)]/50 text-right">
+                    <span className={`px-2.5 py-1 rounded-full text-xs font-semibold
+                      ${staff.rate >= 35 ? 'bg-[var(--color-accent-green)]/10 text-[var(--color-accent-green)] border border-[var(--color-accent-green)]/20' : 
+                        staff.rate >= 20 ? 'bg-[var(--color-accent-gold)]/10 text-[var(--color-accent-gold)] border border-[var(--color-accent-gold)]/20' : 
+                        'bg-[var(--color-accent-red)]/10 text-[var(--color-accent-red)] border border-[var(--color-accent-red)]/20'}
+                    `}>
+                      {staff.rate.toFixed(1)}%
+                    </span>
+                  </td>
+                  <td className="p-4 border-b border-[var(--color-border-main)]/50 text-right font-bold text-[var(--color-accent-gold)]">
+                    {formatCurrency(staff.revenue)}
+                  </td>
+                </tr>
+              ))}
+              {metrics.staffLeaderboard.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="p-10 text-center text-[var(--color-text-muted)] italic uppercase tracking-widest text-xs">Chưa có dữ liệu tư vấn món</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
